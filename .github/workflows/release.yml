@@ -1,0 +1,49 @@
+name: release
+
+# Publishes a GitHub Release when a signed v* tag is pushed (see scripts/release.sh).
+# The tag itself is created and signed by a human; this job only publishes.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          {
+            echo "![demo](https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/${TAG}/assets/autodap-demo-python.gif)"
+            echo
+            # the CHANGELOG section for this version (between its header and the next)
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
+              grab && /^## \[/ { exit }
+              grab { print }
+            ' CHANGELOG.md
+            echo
+            echo '## Install (lazy.nvim)'
+            echo
+            echo '```lua'
+            echo "{ 'JarnDev/autodap.nvim', dependencies = { 'mfussenegger/nvim-dap', 'williamboman/mason.nvim' }, config = function() require('autodap').setup() end }"
+            echo '```'
+            echo
+            echo "[README](https://github.com/${GITHUB_REPOSITORY}#readme) · [CHANGELOG](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md)"
+          } > NOTES.md
+          cat NOTES.md
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes-file NOTES.md \
+            assets/autodap-demo-*.gif

@@ -1,10 +1,22 @@
-.PHONY: test docs docs-check
+.PHONY: test docs docs-check release release-dry
 
 PANVIMDOC_DIR := .deps/panvimdoc
 PANDOC_IMAGE  := pandoc/core:latest
 
 test:
 	nvim --headless -u tests/minimal_init.lua -l tests/run.lua
+
+# Cut a release: bump CHANGELOG, then create a signed commit and signed tag.
+# The tag is NOT pushed for you — review, then `git push origin main vX.Y.Z`,
+# which triggers the release workflow. Usage: make release VERSION=X.Y.Z
+release:
+	@test -n "$(VERSION)" || { echo "usage: make release VERSION=X.Y.Z"; exit 1; }
+	@scripts/release.sh "$(VERSION)"
+
+# Preview the CHANGELOG bump without touching anything. Usage: make release-dry VERSION=X.Y.Z
+release-dry:
+	@test -n "$(VERSION)" || { echo "usage: make release-dry VERSION=X.Y.Z"; exit 1; }
+	@scripts/release.sh --dry-run "$(VERSION)"
 
 # Regenerate doc/autodap.txt from README.md, byte-identical to what CI checks.
 # Runs pandoc in Docker so no local pandoc install is needed; --user keeps the
