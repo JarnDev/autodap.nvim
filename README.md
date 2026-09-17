@@ -1,9 +1,14 @@
 # 🐛 autodap.nvim
 
+[![CI](https://github.com/JarnDev/autodap.nvim/actions/workflows/ci.yml/badge.svg)](https://github.com/JarnDev/autodap.nvim/actions/workflows/ci.yml)
+
 Zero-config debugging for Neovim. A thin layer over
 [nvim-dap](https://github.com/mfussenegger/nvim-dap) that reads your project and
 wires up the debugger for you — no `launch.json`, no per-language boilerplate.
 Press your debug key and pick a target.
+
+> What a per-language debug plugin does for one language, autodap orchestrates
+> for all of them — automatically, from your project.
 
 ![autodap in a Python project](assets/autodap-demo-python.gif)
 
@@ -43,6 +48,8 @@ and configurations on the fly.
   `tsx`/`ts-node` and virtualenvs resolve through hoisted layouts.
 - **Works on loose files too** — the project support is additive; a lone `.js`,
   `.py`, or `.c` with no project still gets a launch config.
+- **Debug the test under the cursor** — jest, vitest, and pytest; the nearest
+  test is detected and run in the debugger.
 - **Lazy adapter install** — missing adapters are fetched via
   [mason](https://github.com/williamboman/mason.nvim) on first use (optional).
 
@@ -104,6 +111,14 @@ require('autodap').setup({
     auto_compile = true,
     compile_flags = { '-g', '-O0' },
   },
+
+  -- Extra CLI args appended to the "debug the test under the cursor" command,
+  -- per framework. Escape hatch for version-specific flags — e.g. vitest may
+  -- need { '--no-file-parallelism' } (or an older single-thread flag) for
+  -- breakpoints to bind reliably.
+  test = {
+    extra_args = { jest = {}, vitest = {}, pytest = {} },
+  },
 })
 ```
 
@@ -130,9 +145,25 @@ executables) on top.
 is no build system autodap compiles the current file with `-g` and debugs the
 result, recompiling on each launch so edits are always picked up.
 
+### Debug the test under the cursor
+
+Put the cursor in a test and run it in the debugger — jest, vitest, or pytest,
+detected from the project:
+
+```lua
+vim.keymap.set('n', '<leader>dt', function() require('autodap').debug_test() end)
+```
+
+It finds the nearest test above the cursor (`it`/`test`/`describe` for JS,
+`def test_*` and its enclosing `class` for pytest) and launches just that test.
+The same entry also shows up at the top of the `<F5>` picker when you're in a
+test file. If breakpoints don't bind on a given framework version, add flags via
+`test.extra_args`.
+
 ### Commands
 
 - `:AutodapContinue` — same as `require('autodap').continue()`.
+- `:AutodapTest` — debug the test under the cursor.
 - `:AutodapReset` — forget the remembered C/C++ executable for the current project.
 
 ## ⚠️ Known limitations
@@ -143,11 +174,14 @@ result, recompiling on each launch so edits are always picked up.
 - C/C++ target discovery uses the CMake File API when available and a bounded
   filesystem scan otherwise. It auto-compiles a _single_ file, but does not build
   a multi-file project — point it at your build system's output.
-- No debug-test integration (jest/vitest/pytest) and no Rust/Go yet.
+- Test-under-cursor for JS is version-sensitive (jest uses `--runInBand`; vitest
+  breakpoints may need a single-thread flag depending on the version) — use
+  `test.extra_args` to tune. Nearest-test detection is regex-based, not Treesitter.
+- No Rust/Go yet.
 
 ## 🗺️ Roadmap
 
-- Debug the test under the cursor (jest / vitest / pytest).
+- Treesitter-based nearest-test detection.
 - Auto-continue after a mason install finishes (`pkg:once('install:success')`).
 - Rust (codelldb) and Go (delve).
 - Optional CMake File API query bootstrap when no reply exists yet.
@@ -164,6 +198,26 @@ make test
 
 The first run clones `nvim-dap` into `tests/.deps/` so the tests hit the real
 provider and adapter API.
+
+## 🩺 Help & health
+
+- `:help autodap` — the full docs (generated from this README).
+- `:checkhealth autodap` — verifies Neovim, nvim-dap and mason, shows which
+  adapters are installed, and prints what autodap detects for the current buffer
+  (language, project root, C/C++ targets, the test under the cursor). Run it
+  first when something isn't picked up.
+
+## 🔌 Similar plugins
+
+autodap is generic on purpose. If you only ever debug one language, a dedicated
+plugin may fit you better (autodap does not install or depend on these — they're
+alternatives, not requirements):
+
+- [nvim-dap-python](https://github.com/mfussenegger/nvim-dap-python) — Python only.
+- [nvim-dap-go](https://github.com/leoluz/nvim-dap-go) — Go only.
+- [mason-nvim-dap](https://github.com/jay-babu/mason-nvim-dap.nvim) — installs
+  adapters and ships stock configs. Like it, autodap installs only the debug
+  adapters (never plugins); unlike it, autodap generates project-aware configs.
 
 ## 🙏 Acknowledgements
 

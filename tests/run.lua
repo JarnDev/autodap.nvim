@@ -140,6 +140,59 @@ check(
   sl and sl.pythonPath
 )
 
+-- TEST UNDER CURSOR: framework detection + nearest-test extraction + config.
+local testmod = require('autodap.test')
+
+print('[test / jest]')
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+vim.bo.filetype = 'javascript'
+vim.api.nvim_win_set_cursor(0, { 3, 0 }) -- inside it('adds numbers')
+local jt = testmod.config(0)
+check('jest: nearest test captured', jt ~= nil and jt.name:find('adds numbers', 1, true) ~= nil, jt and jt.name)
+check('jest: program is jest/bin/jest.js', jt ~= nil and tostring(jt.program):find('jest/bin/jest.js', 1, true) ~= nil, jt and jt.program)
+check(
+  'jest: args carry -t <title> and --runInBand',
+  jt ~= nil and vim.tbl_contains(jt.args, '-t') and vim.tbl_contains(jt.args, 'adds numbers') and vim.tbl_contains(jt.args, '--runInBand'),
+  jt and table.concat(jt.args, ' ')
+)
+
+vim.cmd.edit(fx .. '/jest-proj/paren.test.js')
+vim.bo.filetype = 'javascript'
+vim.api.nvim_win_set_cursor(0, { 2, 0 }) -- inside it('adds (two) numbers')
+local jp = testmod.config(0)
+check(
+  'jest: -t title is regex-escaped',
+  jp ~= nil and vim.tbl_contains(jp.args, 'adds \\(two\\) numbers'),
+  jp and table.concat(jp.args, ' ')
+)
+
+print('[test / vitest]')
+vim.cmd.edit(fx .. '/vitest-proj/sum.test.ts')
+vim.bo.filetype = 'typescript'
+vim.api.nvim_win_set_cursor(0, { 4, 0 }) -- inside test('multiplies')
+local vt = testmod.config(0)
+check('vitest: detected over jest', vt ~= nil and vt.name:find('multiplies', 1, true) ~= nil, vt and vt.name)
+check('vitest: program is vitest.mjs', vt ~= nil and tostring(vt.program):find('vitest/vitest.mjs', 1, true) ~= nil, vt and vt.program)
+check('vitest: args start with run', vt ~= nil and vt.args[1] == 'run' and vim.tbl_contains(vt.args, 'multiplies'), vt and table.concat(vt.args, ' '))
+
+print('[test / pytest]')
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+vim.bo.filetype = 'python'
+vim.api.nvim_win_set_cursor(0, { 3, 0 }) -- inside TestMath.test_add
+local pt = testmod.config(0)
+check('pytest: module is pytest', pt ~= nil and pt.module == 'pytest', pt and pt.module)
+check(
+  'pytest: node id is relative file::Class::func',
+  pt ~= nil and pt.args[1] == 'tests/test_math.py::TestMath::test_add',
+  pt and pt.args[1]
+)
+check('pytest: interpreter from project venv', pt ~= nil and pt.pythonPath:find('.venv/bin/python', 1, true) ~= nil, pt and pt.pythonPath)
+
+print('[test / non-test file]')
+vim.cmd.edit(fx .. '/node-monorepo/packages/app/src/index.ts')
+vim.bo.filetype = 'typescript'
+check('a non-test file yields no test config', testmod.config(0) == nil)
+
 -- COMPOSABILITY: the pitch is that we register as a provider + lazy adapters
 -- that resolve fresh, rather than clobbering the user's setup.
 print('[composability]')

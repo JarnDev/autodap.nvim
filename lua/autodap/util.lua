@@ -15,6 +15,16 @@ function M.is_file(path)
   return vim.fn.filereadable(path) == 1
 end
 
+-- Path of `file` relative to `root` (both absolute). Falls back to `file`
+-- unchanged when it is not under `root`. Avoids vim.fs.relpath (0.11+) to keep
+-- the 0.10 floor.
+function M.relpath(root, file)
+  if file:sub(1, #root + 1) == root .. '/' then
+    return file:sub(#root + 2)
+  end
+  return file
+end
+
 function M.is_dir(path)
   return vim.fn.isdirectory(path) == 1
 end

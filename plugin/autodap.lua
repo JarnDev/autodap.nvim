@@ -7,6 +7,10 @@ vim.api.nvim_create_user_command('AutodapContinue', function()
   require('autodap').continue()
 end, { desc = 'autodap: configure the current project and start/continue debugging' })
 
+vim.api.nvim_create_user_command('AutodapTest', function()
+  require('autodap').debug_test()
+end, { desc = 'autodap: debug the test under the cursor (jest / vitest / pytest)' })
+
 vim.api.nvim_create_user_command('AutodapReset', function()
   if package.loaded['autodap.adapters.cpp'] then
     require('autodap.adapters.cpp').reset()

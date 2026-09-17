@@ -15,6 +15,12 @@ M.defaults = {
     auto_compile = true, -- compile a lone .c/.cpp with -g when there is no build system
     compile_flags = { '-g', '-O0' },
   },
+  -- Extra CLI args appended to the generated "debug the test under the cursor"
+  -- command, per framework — an escape hatch for version-specific flags (e.g.
+  -- vitest single-thread flags for reliable breakpoints).
+  test = {
+    extra_args = { jest = {}, vitest = {}, pytest = {} },
+  },
 }
 
 M.config = vim.deepcopy(M.defaults)
@@ -51,7 +57,14 @@ function M.configs_for_buf(bufnr)
   local root = detect.lang_root(lang, start)
   -- Pure: no install side effects here. dap.continue() calls providers on every
   -- run; the friendly M.continue() owns adapter installation.
-  return adapter_mod(lang).configs(root, M.config, bufnr)
+  local configs = adapter_mod(lang).configs(root, M.config, bufnr)
+  -- Surface a "Debug test under cursor" entry at the top when the buffer is a
+  -- test file, so it shows up in the same picker as the launch configs.
+  local tcfg = require('autodap.test').config(bufnr)
+  if tcfg then
+    table.insert(configs, 1, tcfg)
+  end
+  return configs
 end
 
 local function register_adapters(dap)
@@ -97,6 +110,31 @@ function M.continue()
     end
   end
   dap.continue()
+end
+
+-- Debug the test under the cursor directly (jest / vitest / pytest), bypassing
+-- the config picker. Map this to e.g. <leader>dt.
+function M.debug_test()
+  local ok, dap = pcall(require, 'dap')
+  if not ok then
+    return
+  end
+  local cfg = require('autodap.test').config()
+  if not cfg then
+    vim.notify('[autodap] no test found under the cursor', vim.log.levels.INFO)
+    return
+  end
+  local lang = cfg.type == 'python' and 'python' or 'node'
+  local install = require('autodap.install')
+  if not install.available(lang) then
+    install.ensure(lang, M.config)
+    vim.notify(
+      ('[autodap] installing the %s debug adapter — run again once it finishes.'):format(lang),
+      vim.log.levels.INFO
+    )
+    return
+  end
+  dap.run(cfg)
 end
 
 return M

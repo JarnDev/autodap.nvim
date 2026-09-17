@@ -1,0 +1,32 @@
+name: panvimdoc
+
+on:
+  push:
+    branches: [main]
+    paths: [README.md]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate vimdoc from README
+        uses: kdheepak/panvimdoc@main
+        with:
+          vimdoc: autodap
+          version: "Neovim >= 0.10"
+          demojify: true
+          treesitter: true
+
+      - name: Commit doc/autodap.txt
+        run: |
+          git config user.name  'Alfredo'
+          git config user.email 'jarn.dev@gmail.com'
+          git add doc/
+          git diff --quiet --cached || git commit -m 'docs: auto-generate vimdoc [skip ci]'
+          git push
