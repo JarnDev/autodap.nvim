@@ -5,7 +5,29 @@ Zero-config debugging for Neovim. A thin layer over
 wires up the debugger for you — no `launch.json`, no per-language boilerplate.
 Press your debug key and pick a target.
 
-<!-- TODO: add a short demo GIF here (record once on a machine with the adapters installed) -->
+![autodap in a Python project](assets/autodap-demo-python.gif)
+
+Open a file, set a breakpoint, press `<F5>`, pick a target. Nothing language-specific is
+typed — the same three keys do the same thing in every project below.
+
+<details>
+<summary><b>C++ (CMake), a lone <code>.c</code> file, and Node</b></summary>
+
+<br>
+
+**C++** — executable discovered from the CMake build directory:
+
+![C++ CMake project](assets/autodap-demo-cpp.gif)
+
+**A lone `.c` file** — no build system, no git repo; compiled with `-g` on launch:
+
+![Lone .c file, compiled on the fly](assets/autodap-demo-lone-c.gif)
+
+**Node** — npm scripts discovered alongside the current file:
+
+![Node project](assets/autodap-demo-node.gif)
+
+</details>
 
 `nvim-dap` is powerful but ships **no** configuration per language: you write the
 adapter and the launch config yourself, for every project. autodap fills that gap
