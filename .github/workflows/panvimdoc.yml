@@ -1,13 +1,20 @@
 name: panvimdoc
 
+# Verifies that the committed doc/autodap.txt matches README.md. It deliberately
+# does NOT commit: a workflow cannot produce a GPG-signed commit without a private
+# key in secrets, and an unsigned commit in the history is not wanted. Regenerate
+# with `make docs` locally and commit it yourself -- the output is byte-identical
+# to what this job generates.
 on:
   push:
     branches: [main]
-    paths: [README.md]
+    paths: [README.md, doc/autodap.txt]
+  pull_request:
+    paths: [README.md, doc/autodap.txt]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   docs:
@@ -15,8 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pandoc writes doc/autodap.txt but will not create the directory itself,
-      # and doc/ is generated output, so it is not in the repo on a fresh checkout.
+      # pandoc writes doc/autodap.txt but will not create the directory itself.
       - name: Ensure doc/ exists
         run: mkdir -p doc
 
@@ -28,10 +34,10 @@ jobs:
           demojify: true
           treesitter: true
 
-      - name: Commit doc/autodap.txt
+      - name: Fail if the committed vimdoc is stale
         run: |
-          git config user.name  'Alfredo'
-          git config user.email 'jarn.dev@gmail.com'
-          git add doc/
-          git diff --quiet --cached || git commit -m 'docs: auto-generate vimdoc [skip ci]'
-          git push
+          if ! git diff --exit-code -- doc/; then
+            echo "::error::doc/autodap.txt is out of date. Run 'make docs' and commit the result."
+            exit 1
+          fi
+          echo "doc/autodap.txt is current."
