@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pandoc writes doc/autodap.txt but will not create the directory itself,
+      # and doc/ is generated output, so it is not in the repo on a fresh checkout.
+      - name: Ensure doc/ exists
+        run: mkdir -p doc
+
       - name: Generate vimdoc from README
         uses: kdheepak/panvimdoc@main
         with:
