@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-17
+
 ### Added
 - Zero-config debugging over nvim-dap via a config _provider_ (composes with
   `launch.json` and user configs instead of overwriting).
@@ -20,4 +22,5 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `:checkhealth autodap`.
 - `python.venv` to pin the interpreter.
 
-[Unreleased]: https://github.com/JarnDev/autodap.nvim/commits/main
+[Unreleased]: https://github.com/JarnDev/autodap.nvim/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.1.0
