@@ -33,6 +33,13 @@ end
 -- Set a breakpoint on `line`, start debugging, and report where it stopped and
 -- what `expression` evaluates to there.
 local function debug_to_breakpoint(file, line, expression)
+  -- The previous language's session is still closing down when its terminated
+  -- event fires — js-debug in particular keeps a parent session around for a
+  -- moment. dap.continue() with a session still attached resumes *that* one
+  -- instead of launching ours, so wait it out and start from a clean slate.
+  vim.wait(20000, function() return dap.session() == nil end, 50)
+  dap.clear_breakpoints()
+
   vim.cmd.edit(file)
   vim.api.nvim_win_set_cursor(0, { line, 0 })
   dap.toggle_breakpoint()
@@ -54,9 +61,11 @@ local function debug_to_breakpoint(file, line, expression)
   local frame = dap.session() and dap.session().current_frame
   local evaluated
   if frame then
+    -- 'watch', not 'repl': codelldb reads repl input as an lldb command first,
+    -- so a bare variable name comes back as "not a valid command".
     dap.session():request(
       'evaluate',
-      { expression = expression, frameId = frame.id, context = 'repl' },
+      { expression = expression, frameId = frame.id, context = 'watch' },
       function(err, resp)
         evaluated = err and ('error: ' .. tostring(err)) or (resp and resp.result)
       end
@@ -133,6 +142,45 @@ else
   check('js-debug launched and stopped at the breakpoint', js.line == 2, 'line ' .. tostring(js.line))
   check('locals are readable in the stopped frame', js.evaluated == '5', js.evaluated)
   check('the program runs to completion after continue', js.terminated)
+end
+
+-- ---- c / c++ ----------------------------------------------------------------
+local cproj = vim.env.E2E_CPP_PROJ
+print('[e2e / c++]')
+if cproj == nil or cproj == '' then
+  print('  skip - ' .. (vim.env.E2E_CPP_SKIP ~= '' and vim.env.E2E_CPP_SKIP or 'toolchain unavailable'))
+else
+  vim.cmd.edit(cproj .. '/src/main.cpp')
+  local cbuf = vim.api.nvim_get_current_buf()
+  check('the sample file is detected as c++', vim.bo[cbuf].filetype == 'cpp', vim.bo[cbuf].filetype)
+
+  local target = config_named(cbuf, 'Launch target')
+  check('a launch config exists with no user configuration', target ~= nil, config_names(cbuf))
+  check('cwd is the project root', target ~= nil and target.cwd == cproj, target and target.cwd)
+  -- `program` is resolved lazily by nvim-dap; calling it is what picks the
+  -- executable out of the build tree, which is the part worth asserting.
+  local program = target and type(target.program) == 'function' and target.program()
+  check('the built executable is discovered in build/', program == cproj .. '/build/app', program)
+
+  pick('Launch target')
+  local cc = debug_to_breakpoint(cproj .. '/src/main.cpp', 5, 'total')
+  check('codelldb launched and stopped at the breakpoint', cc.line == 5, 'line ' .. tostring(cc.line))
+  check('locals are readable in the stopped frame', cc.evaluated == '5', cc.evaluated)
+  check('the program runs to completion after continue', cc.terminated)
+
+  -- A lone .c with no build system at all: autodap compiles it with -g itself.
+  local lone = vim.env.E2E_CPP_LONE
+  print('[e2e / lone c file]')
+  vim.cmd.edit(lone .. '/hello.c')
+  local lbuf = vim.api.nvim_get_current_buf()
+  check('a launch config exists for a file with no project', config_named(lbuf, 'Launch target') ~= nil,
+    config_names(lbuf))
+
+  pick('Launch target')
+  local lc = debug_to_breakpoint(lone .. '/hello.c', 5, 'total')
+  check('autodap compiled the lone file and stopped at the breakpoint', lc.line == 5, 'line ' .. tostring(lc.line))
+  check('locals are readable in the stopped frame', lc.evaluated == '5', lc.evaluated)
+  check('the program runs to completion after continue', lc.terminated)
 end
 
 print(('\n%d failure(s)'):format(failures))

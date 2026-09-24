@@ -10,6 +10,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - End-to-end suite (`make test-e2e`): drives real debugpy and js-debug sessions
   from a throwaway Neovim config — breakpoint, locals, run to completion — and
   runs in CI alongside the config-generation tests.
+- The end-to-end suite now covers C/C++ with real codelldb sessions, in both
+  shapes autodap handles: a built project it discovers the executable in, and a
+  lone `.c` file it compiles itself. Skipped with a printed reason when no
+  compiler is present; CI runs it and caches the codelldb download.
 - Single-file C/C++ auto-compile honors the nearest `compile_flags.txt` (the clangd convention):
   its flags (for example `-std=c++20` or `-Iinc`) are passed to the compiler, with relative paths
   resolved from that file's directory. The `-g -O0` debug flags still come last.

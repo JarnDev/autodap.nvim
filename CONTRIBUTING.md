@@ -23,17 +23,43 @@ make test-e2e
 
 `scripts/e2e.sh` builds a throwaway world in `$TMPDIR` — clean `XDG_*` dirs, a
 Neovim config whose only plugins are nvim-dap and autodap (`tests/e2e/init.lua`,
-installed with lazy.nvim exactly as the README documents), a sample Python and a
-sample Node project, and the two adapters: debugpy (the pure-python wheel) and
-js-debug, exposed under the same `debugpy-adapter` / `js-debug-adapter` names
-mason uses. `tests/e2e/run.lua` then sets a breakpoint, calls
+installed with lazy.nvim exactly as the README documents), sample Python, Node
+and C++ projects, and the three adapters: debugpy (the pure-python wheel),
+js-debug, and codelldb (unpacked from its release `.vsix`), exposed under the
+same `debugpy-adapter` / `js-debug-adapter` / `codelldb` names mason uses.
+`tests/e2e/run.lua` then sets a breakpoint, calls
 `require('autodap').continue()`, and asserts each session stops on the right
 line, exposes locals, and runs to completion. It needs network and python3 — no
-pip, no compiler — and touches nothing outside the temp directory. The Node half
-is skipped when node is missing; C/C++ is not covered yet (codelldb is a large
-download and needs a compiler on the runner).
+pip — and touches nothing outside the temp directory and the adapter cache.
 
-Both suites run in CI on every push and pull request.
+Each language is gated on its toolchain and skipped with a printed reason rather
+than failing:
+
+| Language | Needs | Skipped when |
+| --- | --- | --- |
+| Python | `python3` | never — it is a hard requirement of the script |
+| Node | `node` | node is not installed, or js-debug cannot be fetched |
+| C/C++ | `c++`, `g++` or `clang++` | no compiler, or codelldb cannot be fetched |
+
+The C/C++ half covers both shapes autodap handles: a built project with a
+`compile_commands.json` (autodap finds `build/app`) and a lone `.c` file with no
+build system at all (autodap compiles it with `-g` itself). Nothing but a
+compiler is required — the sample is compiled directly by the script, so cmake
+and make are not needed.
+
+codelldb is a ~55 MB download, so it is cached outside `$TMPDIR` in
+`$AUTODAP_E2E_CACHE` (default `${XDG_CACHE_HOME:-~/.cache}/autodap-e2e`) and
+reused by later runs. Delete that directory to force a re-download. Set
+`CODELLDB_VERSION` (also `DEBUGPY_VERSION`, `JS_DEBUG_VERSION`) to pin a
+different release. An adapter already on `PATH` is used as-is and nothing is
+downloaded.
+
+Both suites run in CI on every push and pull request, and CI runs the C/C++ half
+too: `ubuntu-latest` ships `g++`, and the workflow caches `~/.cache/autodap-e2e`
+keyed on `CODELLDB_VERSION` so only the first run after a version bump pays for
+the codelldb download. That version is pinned in both `.github/workflows/ci.yml`
+and `scripts/e2e.sh` — bump them together, or the cache key stops matching what
+is downloaded.
 
 ## Documentation
 
