@@ -7,6 +7,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Nearest-test detection is Treesitter-based wherever a parser for the buffer's
+  language is installed: the test resolved is the innermost one the cursor is
+  actually inside. Nested `describe`s join the `-t` pattern, a cursor on a
+  `@pytest.mark.parametrize` decorator resolves to the test it decorates, nested
+  `class Test*` produce the full `Outer::Inner::test_x` node id, a `def` nested
+  inside a test is no longer mistaken for a test, and parametrised titles
+  (`it.each`'s `%s` / `$column`, `${}` in template literals) become wildcards so
+  every row matches instead of none. Treesitter is not a dependency — with no
+  parser autodap falls back to the previous regex scanner, and
+  `:checkhealth autodap` reports which of the two a buffer is getting.
 - End-to-end suite (`make test-e2e`): drives real debugpy and js-debug sessions
   from a throwaway Neovim config — breakpoint, locals, run to completion — and
   runs in CI alongside the config-generation tests.

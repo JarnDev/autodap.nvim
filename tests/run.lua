@@ -171,7 +171,8 @@ check('jest: nearest test captured', jt ~= nil and jt.name:find('adds numbers', 
 check('jest: program is jest/bin/jest.js', jt ~= nil and tostring(jt.program):find('jest/bin/jest.js', 1, true) ~= nil, jt and jt.program)
 check(
   'jest: args carry -t <title> and --runInBand',
-  jt ~= nil and vim.tbl_contains(jt.args, '-t') and vim.tbl_contains(jt.args, 'adds numbers') and vim.tbl_contains(jt.args, '--runInBand'),
+  jt ~= nil and vim.tbl_contains(jt.args, '-t') and vim.tbl_contains(jt.args, '--runInBand')
+    and jt.args[3]:find('adds numbers', 1, true) ~= nil,
   jt and table.concat(jt.args, ' ')
 )
 
@@ -227,6 +228,194 @@ print('[test / non-test file]')
 vim.cmd.edit(fx .. '/node-monorepo/packages/app/src/index.ts')
 vim.bo.filetype = 'typescript'
 check('a non-test file yields no test config', testmod.config(0) == nil)
+
+-- NEAREST-TEST RESOLUTION VIA TREESITTER. The regex scanner reads one line at a
+-- time, so it cannot see nesting, decorators, or where a title actually ends.
+-- These are the cases that only come out right when the file is parsed.
+-- `vim.treesitter.language.add` reports success for a language it never found,
+-- so the only honest probe is to ask for a parser the way autodap does.
+local function parser_installed(lang)
+  local buf = vim.api.nvim_create_buf(false, true)
+  local ok, parser = pcall(vim.treesitter.get_parser, buf, lang, { error = false })
+  vim.api.nvim_buf_delete(buf, { force = true })
+  return ok and parser ~= nil
+end
+
+local have_parsers = true
+for _, l in ipairs({ 'python', 'javascript', 'typescript' }) do
+  have_parsers = have_parsers and parser_installed(l)
+end
+
+-- `-t` is a regex the runner applies to the full test name, so assert on what it
+-- matches rather than on its spelling. Vim's \v magic is close enough to a JS
+-- RegExp for these patterns.
+local function matches(pattern, name)
+  return vim.fn.match(name, '\\v' .. pattern) >= 0
+end
+
+local function arg_after(cfg, flag)
+  for i, a in ipairs(cfg.args or {}) do
+    if a == flag then
+      return cfg.args[i + 1]
+    end
+  end
+  return nil
+end
+
+if not have_parsers then
+  print('[test / treesitter]')
+  if vim.env.AUTODAP_REQUIRE_TREESITTER ~= nil and vim.env.AUTODAP_REQUIRE_TREESITTER ~= '' then
+    check('treesitter parsers are available (AUTODAP_REQUIRE_TREESITTER is set)', false)
+  else
+    print('  skip - no treesitter parsers built (see tests/minimal_init.lua)')
+  end
+else
+  print('[test / treesitter :: python]')
+  vim.cmd.edit(fx .. '/pytest-proj/tests/test_nested.py')
+  vim.bo.filetype = 'python'
+
+  check('python: resolver reports treesitter', testmod.resolver(0) == 'treesitter', testmod.resolver(0))
+
+  -- The cursor is on the @pytest.mark.parametrize line. The decorator is part of
+  -- the test, but it sits *above* `def`, so the regex scanner finds nothing.
+  vim.api.nvim_win_set_cursor(0, { 6, 0 })
+  local dec = testmod.config(0)
+  check(
+    'pytest: cursor on a decorator resolves to the test it decorates',
+    dec ~= nil and dec.args[1] == 'tests/test_nested.py::TestOuter::TestInner::test_param',
+    dec and dec.args[1]
+  )
+
+  -- Nested classes: the node id needs every enclosing Test* class, not just the
+  -- innermost one the indentation heuristic stops at.
+  vim.api.nvim_win_set_cursor(0, { 12, 0 })
+  local nested = testmod.config(0)
+  check(
+    'pytest: nested classes give the full Outer::Inner::test node id',
+    nested ~= nil and nested.args[1] == 'tests/test_nested.py::TestOuter::TestInner::test_param',
+    nested and nested.args[1]
+  )
+
+  -- Line 10 is inside `def test_helper()`, a plain closure. pytest does not
+  -- collect it, so the answer is still the enclosing test.
+  vim.api.nvim_win_set_cursor(0, { 10, 0 })
+  local inner = testmod.config(0)
+  check(
+    'pytest: a def nested inside a test is not itself a test',
+    inner ~= nil and inner.args[1] == 'tests/test_nested.py::TestOuter::TestInner::test_param',
+    inner and inner.args[1]
+  )
+
+  vim.api.nvim_win_set_cursor(0, { 15, 0 })
+  local sibling = testmod.config(0)
+  check(
+    'pytest: a sibling method takes only its own enclosing class',
+    sibling ~= nil and sibling.args[1] == 'tests/test_nested.py::TestOuter::test_outer_only',
+    sibling and sibling.args[1]
+  )
+
+  vim.api.nvim_win_set_cursor(0, { 19, 0 })
+  local modlevel = testmod.config(0)
+  check(
+    'pytest: a module-level test carries no class',
+    modlevel ~= nil and modlevel.args[1] == 'tests/test_nested.py::test_module_level',
+    modlevel and modlevel.args[1]
+  )
+
+  print('[test / treesitter :: node]')
+  vim.cmd.edit(fx .. '/jest-proj/nested.test.js')
+  vim.bo.filetype = 'javascript'
+
+  check('node: resolver reports treesitter', testmod.resolver(0) == 'treesitter', testmod.resolver(0))
+
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  local deep = testmod.config(0)
+  local deep_t = deep and arg_after(deep, '-t')
+  check(
+    'jest: nested describes are part of the -t pattern',
+    deep_t ~= nil and matches(deep_t, 'outer suite > inner suite > adds (two) numbers'),
+    deep_t
+  )
+  check(
+    'jest: the -t pattern does not match a same-named test in another suite',
+    deep_t ~= nil and not matches(deep_t, 'somewhere else > adds (two) numbers'),
+    deep_t
+  )
+  check('jest: the label shows the whole path', deep ~= nil and deep.name == 'Debug test: outer suite > inner suite > adds (two) numbers', deep and deep.name)
+
+  -- it.each interpolates the row into the title; `%i` never reaches the name the
+  -- runner reports, so matching it literally would match nothing at all.
+  vim.api.nvim_win_set_cursor(0, { 8, 0 })
+  local each_t = arg_after(testmod.config(0) or {}, '-t')
+  check(
+    'jest: it.each placeholders become wildcards',
+    each_t ~= nil and matches(each_t, 'outer suite > inner suite > adds 1 and 2')
+      and matches(each_t, 'outer suite > inner suite > adds 3 and 4'),
+    each_t
+  )
+
+  -- Same for a template literal: `${...}` is only known at runtime.
+  vim.api.nvim_win_set_cursor(0, { 12, 0 })
+  local tpl_t = arg_after(testmod.config(0) or {}, '-t')
+  check(
+    'jest: template substitutions become wildcards',
+    tpl_t ~= nil and matches(tpl_t, 'outer suite > inner suite > interpolates x in the title'),
+    tpl_t
+  )
+
+  -- Between the tests, still inside the outer describe: the answer is that
+  -- suite, not whichever test happens to sit above the cursor.
+  vim.api.nvim_win_set_cursor(0, { 16, 0 })
+  local suite = testmod.config(0)
+  check(
+    'jest: a cursor outside every it() resolves to the enclosing suite',
+    suite ~= nil and suite.name == 'Debug suite: outer suite',
+    suite and suite.name
+  )
+
+  vim.cmd.edit(fx .. '/vitest-proj/sum.test.ts')
+  vim.bo.filetype = 'typescript'
+  vim.api.nvim_win_set_cursor(0, { 4, 0 })
+  local vts = testmod.config(0)
+  check(
+    'vitest: typescript is resolved with treesitter too',
+    testmod.resolver(0) == 'treesitter' and vts ~= nil and vim.tbl_contains(vts.args, 'multiplies'),
+    vts and table.concat(vts.args, ' ')
+  )
+end
+
+-- THE FALLBACK. autodap must not require nvim-treesitter, so with no parser for
+-- the buffer the regex scanner has to keep answering. Stubbing get_parser is
+-- what a machine without the parser installed actually looks like from here.
+print('[test / regex fallback without a parser]')
+local real_get_parser = vim.treesitter.get_parser
+vim.treesitter.get_parser = function()
+  error('no parser for this buffer')
+end
+local ok_fallback, fallback_err = pcall(function()
+  vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+  vim.bo.filetype = 'javascript'
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  check('resolver reports the regex fallback', testmod.resolver(0) == 'regex', testmod.resolver(0))
+  local fb = testmod.config(0)
+  check(
+    'jest still resolves the nearest test without a parser',
+    fb ~= nil and arg_after(fb, '-t') == 'adds numbers',
+    fb and table.concat(fb.args, ' ')
+  )
+
+  vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+  vim.bo.filetype = 'python'
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  local fp = testmod.config(0)
+  check(
+    'pytest still resolves the nearest test without a parser',
+    fp ~= nil and fp.args[1] == 'tests/test_math.py::TestMath::test_add',
+    fp and fp.args[1]
+  )
+end)
+vim.treesitter.get_parser = real_get_parser
+check('the fallback path raised nothing', ok_fallback, fallback_err)
 
 -- COMPOSABILITY: the pitch is that we register as a provider + lazy adapters
 -- that resolve fresh, rather than clobbering the user's setup.

@@ -31,8 +31,13 @@ jobs:
       - name: Version
         run: nvim --version | head -1
 
+      # AUTODAP_REQUIRE_TREESITTER turns "no parser built, cases skipped" into a
+      # failure. The runner has a C compiler, so a skip here means the parser
+      # bootstrap broke, not that the environment is thin.
       - name: Run tests
         run: make test
+        env:
+          AUTODAP_REQUIRE_TREESITTER: '1'
 
   e2e:
     name: end-to-end (real debug session)
