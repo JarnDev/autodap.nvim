@@ -1,16 +1,25 @@
 local M = {}
 local install = require('autodap.install')
 
+-- The adapter function we installed, so a second setup() can tell its own
+-- registration apart from one the user made.
+local ours
+
+-- Returns true when autodap owns the adapter, false when one was already
+-- registered (by the user or mason-nvim-dap) and we left it alone.
 function M.register(dap, _)
-  if dap.adapters.python ~= nil then
-    return
+  local current = dap.adapters.python
+  if current ~= nil and current ~= ours then
+    return false
   end
-  dap.adapters.python = function(cb)
+  ours = function(cb)
     cb({
       type = 'executable',
       command = install.bin_path('python') or 'debugpy-adapter',
     })
   end
+  dap.adapters.python = ours
+  return true
 end
 
 -- Resolve the interpreter the debuggee should run under. Precedence, most

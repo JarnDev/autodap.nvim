@@ -72,9 +72,15 @@ function M.configs_for_buf(bufnr)
   return configs
 end
 
+-- Languages whose dap adapter autodap actually registered. When the user (or
+-- mason-nvim-dap) already had one, it is theirs and points at their own binary,
+-- so the install guard below must stay out of the way.
+local owned = {}
+
 local function register_adapters(dap)
+  owned = {}
   for _, lang in ipairs(M.config.languages) do
-    adapter_mod(lang).register(dap, M.config)
+    owned[lang] = adapter_mod(lang).register(dap, M.config) == true
   end
 end
 
@@ -101,6 +107,32 @@ local function register_ui(dap)
   dap.listeners.before.attach.autodap_ui = function() pcall(dapui.open) end
 end
 
+-- Guard run before starting a session: make sure the adapter binary autodap
+-- would launch actually exists, and install it instead of letting nvim-dap
+-- throw. Returns true when it is safe to proceed.
+local function adapter_ready(lang)
+  if not lang or not enabled(lang) or not owned[lang] then
+    return true -- not ours to police
+  end
+  local install = require('autodap.install')
+  local status = install.ensure(lang, M.config)
+  if status == 'available' then
+    return true
+  end
+  if status == 'installing' then
+    vim.notify(
+      ('[autodap] installing the %s debug adapter — run again once it finishes.'):format(lang),
+      vim.log.levels.INFO
+    )
+  else
+    vim.notify(
+      ('[autodap] no %s debug adapter found — %s'):format(lang, install.install_hint(lang)),
+      vim.log.levels.WARN
+    )
+  end
+  return false
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend('force', vim.deepcopy(M.defaults), opts or {})
   local ok, dap = pcall(require, 'dap')
@@ -117,6 +149,13 @@ function M.setup(opts)
   end
 end
 
+-- Whether autodap registered the dap adapter for `lang` itself. False when the
+-- user already had one — :checkhealth reports that instead of nagging about a
+-- binary autodap is not going to launch.
+function M.owns(lang)
+  return owned[lang] == true
+end
+
 -- Friendly entrypoint — map this to your debug key (e.g. <F5>). Unlike a bare
 -- dap.continue(), it checks the adapter exists first and kicks off a mason
 -- install instead of throwing a DAP stack trace on a fresh machine.
@@ -126,17 +165,8 @@ function M.continue()
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  local lang = detect.lang_for_buf(bufnr)
-  if lang and enabled(lang) then
-    local install = require('autodap.install')
-    if not install.available(lang) then
-      install.ensure(lang, M.config)
-      vim.notify(
-        ('[autodap] installing the %s debug adapter — run again once it finishes.'):format(lang),
-        vim.log.levels.INFO
-      )
-      return
-    end
+  if not adapter_ready(detect.lang_for_buf(bufnr)) then
+    return
   end
   dap.continue()
 end
@@ -153,14 +183,7 @@ function M.debug_test()
     vim.notify('[autodap] no test found under the cursor', vim.log.levels.INFO)
     return
   end
-  local lang = cfg.type == 'python' and 'python' or 'node'
-  local install = require('autodap.install')
-  if not install.available(lang) then
-    install.ensure(lang, M.config)
-    vim.notify(
-      ('[autodap] installing the %s debug adapter — run again once it finishes.'):format(lang),
-      vim.log.levels.INFO
-    )
+  if not adapter_ready(cfg.type == 'python' and 'python' or 'node') then
     return
   end
   dap.run(cfg)

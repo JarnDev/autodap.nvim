@@ -10,11 +10,18 @@ function M.reset()
   last_program = {}
 end
 
+-- The adapter function we installed, so a second setup() can tell its own
+-- registration apart from one the user made.
+local ours
+
+-- Returns true when autodap owns the adapter, false when one was already
+-- registered and we left it alone.
 function M.register(dap, _)
-  if dap.adapters.codelldb ~= nil then
-    return
+  local current = dap.adapters.codelldb
+  if current ~= nil and current ~= ours then
+    return false
   end
-  dap.adapters.codelldb = function(cb)
+  ours = function(cb)
     cb({
       type = 'server',
       port = '${port}',
@@ -24,6 +31,8 @@ function M.register(dap, _)
       },
     })
   end
+  dap.adapters.codelldb = ours
+  return true
 end
 
 -- Extensions that are never a debuggable target (libraries, objects, build junk).

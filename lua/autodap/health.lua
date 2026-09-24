@@ -37,24 +37,52 @@ local function check_adapters()
   H.start('autodap: adapters')
   for _, lang in ipairs(autodap.config.languages or {}) do
     local path = install.bin_path(lang)
-    local mason = install.registry[lang] and install.registry[lang].mason
-    if path then
+    if not autodap.owns(lang) then
+      H.ok(('%s: adapter registered outside autodap — left untouched'):format(lang))
+    elseif path then
       H.ok(('%s: %s'):format(lang, path))
-    else
+    elseif autodap.config.auto_install and pcall(require, 'mason-registry') then
       H.warn(('%s: adapter not found (installs on first use)'):format(lang), {
-        mason and (':MasonInstall ' .. mason) or nil,
+        install.install_hint(lang),
+      })
+    else
+      H.warn(('%s: adapter not found and it will not be installed'):format(lang), {
+        install.install_hint(lang),
       })
     end
   end
 end
 
+-- `:checkhealth` runs with its own scratch buffer focused, so "the current
+-- buffer" has to mean the file you were last editing, not the report itself.
+local function subject_buf()
+  local cur = vim.api.nvim_get_current_buf()
+  if vim.bo[cur].buftype == '' and vim.api.nvim_buf_get_name(cur) ~= '' then
+    return cur
+  end
+  local best, best_used
+  for _, info in ipairs(vim.fn.getbufinfo({ buflisted = 1 })) do
+    if info.name ~= '' and vim.bo[info.bufnr].buftype == '' then
+      if not best_used or info.lastused > best_used then
+        best, best_used = info.bufnr, info.lastused
+      end
+    end
+  end
+  return best
+end
+
 local function check_buffer()
   H.start('autodap: current buffer')
-  local bufnr = vim.api.nvim_get_current_buf()
+  local bufnr = subject_buf()
   local ok, detect = pcall(require, 'autodap.detect')
   if not ok then
     return
   end
+  if not bufnr then
+    H.info('no file open — open a source file and run this again')
+    return
+  end
+  H.info(('buffer: %s'):format(vim.fn.fnamemodify(vim.api.nvim_buf_get_name(bufnr), ':~:.')))
   local lang, ft = detect.lang_for_buf(bufnr)
   if not lang then
     H.info(('filetype %q is not handled by autodap'):format(ft or ''))
