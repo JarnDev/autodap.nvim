@@ -115,6 +115,13 @@ require('autodap').setup({
   -- Languages to handle. Drop one to leave its filetypes entirely to your own config.
   languages = { 'node', 'python', 'cpp' },
 
+  python = {
+    -- 'auto' resolves the interpreter from $VIRTUAL_ENV, then the nearest
+    -- .venv / venv / env walking up. Set a venv directory or an interpreter
+    -- path to pin it instead.
+    venv = 'auto',
+  },
+
   cpp = {
     adapter = 'codelldb',
     -- Directories scanned for prebuilt executables (globs allowed).
@@ -141,7 +148,9 @@ Map your debug key to `require('autodap').continue()` and use it as you would
 `dap.continue()`. It does one extra thing on a fresh machine: it checks the
 adapter is installed _before_ starting and kicks off the mason install with a
 notification, instead of letting nvim-dap throw a stack trace on a missing
-binary. Run it again once the install finishes.
+binary. Run it again once the install finishes. With `auto_install = false` (or
+no mason) it tells you the package to install by hand instead, and if you
+registered the adapter yourself it stays out of the way entirely.
 
 A plain `require('dap').continue()` from your existing keymaps also works — the
 generated configs come through the provider — it just skips that install guard.
@@ -211,6 +220,19 @@ make test
 
 The first run clones `nvim-dap` into `tests/.deps/` so the tests hit the real
 provider and adapter API.
+
+A second suite debugs for real — it builds a throwaway Neovim config containing
+nothing but nvim-dap and autodap, installs them the way the install section
+above tells you to, then sets a breakpoint in a sample Python and a sample Node
+project, launches debugpy and js-debug, reads a local out of each stopped frame
+and runs both to completion:
+
+```sh
+make test-e2e
+```
+
+It writes only to a temporary directory (your own config and plugins are never
+touched) and runs in CI on every push.
 
 ## 🩺 Help & health
 

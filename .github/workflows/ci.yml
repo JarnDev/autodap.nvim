@@ -33,3 +33,22 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  e2e:
+    name: end-to-end (real debug session)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim (stable)
+        run: |
+          curl -fsSLO https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage
+          chmod +x nvim-linux-x86_64.appimage
+          ./nvim-linux-x86_64.appimage --appimage-extract >/dev/null
+          echo "$PWD/squashfs-root/usr/bin" >> "$GITHUB_PATH"
+
+      # Installs autodap into a throwaway Neovim config the way the README
+      # documents, then debugs a sample project for real: breakpoint, locals,
+      # run to completion.
+      - name: Run the end-to-end debug session
+        run: make test-e2e

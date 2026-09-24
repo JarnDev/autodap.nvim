@@ -15,6 +15,26 @@ It clones `nvim-dap` into `tests/.deps/` on first run and exercises config
 generation and target discovery headless against fixture projects — no live
 debug session, so it needs no adapters installed.
 
+Run the end-to-end check:
+
+```sh
+make test-e2e
+```
+
+`scripts/e2e.sh` builds a throwaway world in `$TMPDIR` — clean `XDG_*` dirs, a
+Neovim config whose only plugins are nvim-dap and autodap (`tests/e2e/init.lua`,
+installed with lazy.nvim exactly as the README documents), a sample Python and a
+sample Node project, and the two adapters: debugpy (the pure-python wheel) and
+js-debug, exposed under the same `debugpy-adapter` / `js-debug-adapter` names
+mason uses. `tests/e2e/run.lua` then sets a breakpoint, calls
+`require('autodap').continue()`, and asserts each session stops on the right
+line, exposes locals, and runs to completion. It needs network and python3 — no
+pip, no compiler — and touches nothing outside the temp directory. The Node half
+is skipped when node is missing; C/C++ is not covered yet (codelldb is a large
+download and needs a compiler on the runner).
+
+Both suites run in CI on every push and pull request.
+
 ## Documentation
 
 `doc/autodap.txt` (what `:help autodap` reads) is generated from `README.md`
