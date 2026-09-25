@@ -33,6 +33,12 @@ jobs:
           version: "Neovim >= 0.10"
           demojify: true
           treesitter: true
+          # Leave the "Last change: <today>" stamp off the title line. With it,
+          # this job compares the docs *and* today's date, so a README change
+          # generated one day fails here the next on nothing but that line.
+          # `make docs` passes the same flag as --metadata=nodate:true; both
+          # sides have to set it or the check just fails differently.
+          nodate: true
 
       - name: Fail if the committed vimdoc is stale
         run: |
