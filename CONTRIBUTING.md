@@ -31,6 +31,22 @@ This runs pandoc in Docker (no local pandoc needed) and produces output
 byte-identical to what CI checks. Commit `doc/autodap.txt` (and `doc/tags`)
 alongside the README change — CI fails when the committed vimdoc is stale.
 
+### No "Last change" date in the header
+
+panvimdoc normally stamps the generation date into the title line, which would
+make the generated file depend on the clock rather than only on `README.md`:
+a README change generated one day would fail `docs-check` the next, on that one
+line, with an error telling you to run `make docs` (which would "fix" it until
+tomorrow). So the date is switched off — `nodate` in
+`.github/workflows/panvimdoc.yml`, `--metadata=nodate:true` in the `Makefile`.
+Vim's `help-writing` calls that part of the header optional, and `git log` is a
+better answer for when the docs last changed.
+
+Both invocations have to carry the flag. `make docs` and the workflow are two
+separate copies of the same panvimdoc call, and a flag set on one side but not
+the other does not make the check pass — it makes it fail differently. Any
+panvimdoc option you change belongs in both places, or neither.
+
 ## Releasing
 
 Maintainer flow. Every commit and tag is GPG-signed by a human; CI never

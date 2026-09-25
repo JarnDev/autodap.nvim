@@ -21,6 +21,12 @@ release-dry:
 # Regenerate doc/autodap.txt from README.md, byte-identical to what CI checks.
 # Runs pandoc in Docker so no local pandoc install is needed; --user keeps the
 # generated file owned by you rather than root.
+#
+# nodate:true drops panvimdoc's "Last change: <today>" stamp from the title line.
+# Without it the output depends on the clock, so docs-check compares the docs
+# *and* the date: a README change regenerated one day fails the check the next,
+# on that one line. The same flag has to be set in
+# .github/workflows/panvimdoc.yml (as `nodate: true`) or the two disagree again.
 docs: $(PANVIMDOC_DIR)
 	@mkdir -p doc
 	docker run --rm --user "$(shell id -u):$(shell id -g)" \
@@ -28,7 +34,7 @@ docs: $(PANVIMDOC_DIR)
 		--citeproc --shift-heading-level-by=0 \
 		--metadata=project:autodap --metadata="vimversion:Neovim >= 0.10" \
 		--metadata=toc:true --metadata=description: \
-		--metadata="titledatepattern:%Y %B %d" \
+		--metadata=nodate:true --metadata="titledatepattern:%Y %B %d" \
 		--metadata=dedupsubheadings:true --metadata=ignorerawblocks:true \
 		--metadata=docmapping:false --metadata=docmappingproject:true \
 		--metadata=treesitter:true --metadata=incrementheadinglevelby:0 \

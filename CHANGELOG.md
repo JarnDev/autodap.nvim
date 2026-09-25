@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `:help autodap` no longer carries a "Last change" date in its header. The date
+  was the generation timestamp, which made the committed vimdoc go stale a day
+  after any `README.md` change and fail the docs check on that line alone.
+
 ## [0.1.0] - 2026-09-17
 
 ### Added
