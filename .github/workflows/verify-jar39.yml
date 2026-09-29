@@ -1,0 +1,140 @@
+name: verify-jar39
+
+# TEMPORARY, not part of PR #1. Executed acceptance evidence for JAR-39 on a
+# throwaway `verify/**` branch, because the agent sandbox has no make, docker,
+# pandoc or nvim and the repo token cannot dispatch or re-run a workflow.
+#
+# The tree here is PR #1's head (5a28499) plus this file, so README.md and
+# doc/autodap.txt are byte-identical to what the PR proposes.
+on:
+  push:
+    branches: ['verify/**']
+
+permissions:
+  contents: read
+
+jobs:
+  # Acceptance 1: a doc generated on one calendar day still compares clean on a
+  # later one. These steps are panvimdoc.yml's docs job verbatim; the only thing
+  # that differs is the date the job runs.
+  later-day-docs-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dates under comparison
+        run: |
+          echo "job runs:            $(date -u '+%Y-%m-%d %H:%M:%SZ')"
+          echo "doc last committed:  $(git log -1 --format=%ad --date=iso-strict -- doc/autodap.txt)"
+          echo "head commit:         $(git log -1 --format='%h %ad' --date=iso-strict)"
+          echo "clock left in doc:   $(grep -c 'Last change' doc/autodap.txt || true) occurrences"
+
+      - name: Ensure doc/ exists
+        run: mkdir -p doc
+
+      - name: Generate vimdoc from README
+        uses: kdheepak/panvimdoc@main
+        with:
+          vimdoc: autodap
+          version: "Neovim >= 0.10"
+          demojify: true
+          treesitter: true
+          nodate: true
+
+      - name: Fail if the committed vimdoc is stale
+        run: |
+          if ! git diff --exit-code -- doc/; then
+            echo "::error::doc/autodap.txt is out of date."
+            exit 1
+          fi
+          echo "doc/autodap.txt is current — regenerated today, identical to the bytes committed on 2026-09-25."
+
+  # Acceptance 2: `make docs` (pandoc in Docker) and the action produce the same
+  # bytes, and both match what is committed. This is the pair the fix has to keep
+  # in agreement; the sandbox cannot run the Docker half at all.
+  make-vs-action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain versions
+        run: |
+          make --version | head -1
+          docker --version
+          echo "Makefile image: $(docker run --rm pandoc/core:latest --version | head -1)"
+
+      - name: make docs
+        run: make docs
+
+      - name: Snapshot the Makefile output, restore the committed bytes
+        run: |
+          cp doc/autodap.txt "$RUNNER_TEMP/make.txt"
+          echo "make docs vs committed:"
+          git --no-pager diff --stat -- doc/ || true
+          git checkout -- doc/autodap.txt
+          git diff --exit-code -- doc/ && echo "working tree back to the committed bytes"
+
+      - name: Generate the same doc with the action
+        uses: kdheepak/panvimdoc@main
+        with:
+          vimdoc: autodap
+          version: "Neovim >= 0.10"
+          demojify: true
+          treesitter: true
+          nodate: true
+
+      - name: Compare make docs, the action, and the committed file
+        run: |
+          cp doc/autodap.txt "$RUNNER_TEMP/action.txt"
+          sha256sum "$RUNNER_TEMP/make.txt" "$RUNNER_TEMP/action.txt" doc/autodap.txt
+          if diff -u "$RUNNER_TEMP/make.txt" "$RUNNER_TEMP/action.txt"; then
+            echo "IDENTICAL: make docs and the action produce the same bytes"
+          else
+            echo "::error::make docs and the action disagree — JAR-42 has become a live bug"
+            exit 1
+          fi
+          git diff --exit-code -- doc/ && echo "the committed doc/autodap.txt matches both generators"
+
+  # Acceptance 3: the header renders as help, at the width Vim expects, and the
+  # tags still resolve after the date came off line 2.
+  help-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim (stable)
+        run: |
+          curl -fsSLO https://github.com/neovim/neovim/releases/download/stable/nvim-linux-x86_64.appimage
+          chmod +x nvim-linux-x86_64.appimage
+          ./nvim-linux-x86_64.appimage --appimage-extract >/dev/null
+          echo "$PWD/squashfs-root/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Version
+        run: nvim --version | head -1
+
+      - name: Header geometry
+        run: |
+          awk 'NR<=2 {printf "line %d: %d columns |%s|\n", NR, length($0), $0}' doc/autodap.txt
+
+      - name: helptags, then resolve tags
+        run: |
+          nvim --headless -c 'set rtp+=.' -c 'helptags doc' -c 'qa!'
+          echo "--- doc/tags ---"
+          head -5 doc/tags
+          for tag in autodap.txt autodap-table-of-contents autodap-autodap.nvim-features; do
+            nvim --headless -c 'set rtp+=.' -c "help $tag" -c 'qa!' \
+              && echo ":help $tag -> resolved" \
+              || { echo "::error:::help $tag failed"; exit 1; }
+          done
+
+      - name: Render :help autodap and print what the reader sees
+        run: |
+          nvim --headless -c 'set rtp+=.' -c 'helptags doc' -c 'silent help autodap' \
+            -c 'redir! > render.txt' -c 'silent 1,24print' -c 'redir END' -c 'qa!'
+          cat -A render.txt | sed -n '1,24p'
+
+      - name: Upload the rendered help buffer
+        uses: actions/upload-artifact@v4
+        with:
+          name: help-render
+          path: render.txt
