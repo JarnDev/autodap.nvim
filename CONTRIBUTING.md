@@ -27,9 +27,13 @@ After any change to `README.md`:
 make docs
 ```
 
-This runs pandoc in Docker (no local pandoc needed) and produces output
-byte-identical to what CI checks. Commit `doc/autodap.txt` (and `doc/tags`)
-alongside the README change — CI fails when the committed vimdoc is stale.
+This runs pandoc in Docker (no local pandoc needed). Every input is pinned — the
+pandoc image, the panvimdoc version, and the "Last change" date (taken from the
+last commit via git, not the wall clock) — and CI runs this very same `make docs`
+target and diffs the result, so the output is byte-identical by construction.
+Commit `doc/autodap.txt` alongside the README change — CI fails when the
+committed vimdoc is stale. (`doc/tags` is generated locally and gitignored; only
+`doc/autodap.txt` is tracked.)
 
 ## Releasing
 
