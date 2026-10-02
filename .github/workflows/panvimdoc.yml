@@ -8,9 +8,9 @@ name: panvimdoc
 on:
   push:
     branches: [main]
-    paths: [README.md, doc/autodap.txt]
+    paths: [README.md, doc/autodap.txt, Makefile, .github/workflows/panvimdoc.yml]
   pull_request:
-    paths: [README.md, doc/autodap.txt]
+    paths: [README.md, doc/autodap.txt, Makefile, .github/workflows/panvimdoc.yml]
   workflow_dispatch:
 
 permissions:
@@ -22,17 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # pandoc writes doc/autodap.txt but will not create the directory itself.
-      - name: Ensure doc/ exists
-        run: mkdir -p doc
-
-      - name: Generate vimdoc from README
-        uses: kdheepak/panvimdoc@main
-        with:
-          vimdoc: autodap
-          version: "Neovim >= 0.10"
-          demojify: true
-          treesitter: true
+      # Regenerate with the SAME generator the maintainer runs locally
+      # (`make docs`: pinned pandoc image + pinned panvimdoc + git-derived date),
+      # rather than a separate action whose version/whitespace could drift out of
+      # step with the committed file. Byte-identical by construction.
+      - name: Regenerate vimdoc with make docs
+        run: make docs
 
       - name: Fail if the committed vimdoc is stale
         run: |
