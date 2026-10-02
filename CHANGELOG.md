@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-02
+
 ### Added
 - Auto-open [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) when a debug
   session starts and close it when the session ends, if it is installed. New
@@ -28,5 +30,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `:checkhealth autodap`.
 - `python.venv` to pin the interpreter.
 
-[Unreleased]: https://github.com/JarnDev/autodap.nvim/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/JarnDev/autodap.nvim/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.2.0
 [0.1.0]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.1.0
