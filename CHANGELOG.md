@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- nvim-dap-ui no longer closes automatically when the debuggee exits. It opened
+  and then immediately closed on the program finishing, hiding the final scopes,
+  stack and REPL output. It now stays open for inspection; close it yourself
+  with `require('dapui').close()`.
+
 ## [0.2.0] - 2026-10-02
 
 ### Added

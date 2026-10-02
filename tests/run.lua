@@ -205,7 +205,8 @@ dap.adapters.python(function(a) shape = a end, {})
 check('python adapter resolves an executable table', shape ~= nil and shape.type == 'executable', shape and shape.type)
 
 -- UI: with config.ui = 'auto' and nvim-dap-ui installed, autodap registers
--- listeners that open the UI on launch/attach and close it on terminate/exit.
+-- listeners that open the UI on launch/attach. It must NOT auto-close on
+-- terminate/exit — the UI stays up for post-run inspection.
 -- nvim-dap-ui is not a test dependency, so we stub it via package.loaded.
 print('[ui / nvim-dap-ui auto-open]')
 local dapui_calls = { open = 0, close = 0 }
@@ -218,11 +219,12 @@ for _, when in ipairs({ 'launch', 'attach', 'event_terminated', 'event_exited' }
 end
 autodap.setup({ auto_install = false, ui = 'auto' })
 check('ui=auto registers an open listener on launch', type(dap.listeners.before.launch.autodap_ui) == 'function')
-check('ui=auto registers a close listener on terminate', type(dap.listeners.before.event_terminated.autodap_ui) == 'function')
+check('ui=auto registers an open listener on attach', type(dap.listeners.before.attach.autodap_ui) == 'function')
+check('ui=auto does NOT register a close on terminate', dap.listeners.before.event_terminated.autodap_ui == nil)
+check('ui=auto does NOT register a close on exit', dap.listeners.before.event_exited.autodap_ui == nil)
 dap.listeners.before.launch.autodap_ui({}, {})
 check('launch listener opens the UI', dapui_calls.open == 1, dapui_calls.open)
-dap.listeners.before.event_terminated.autodap_ui({}, {})
-check('terminate listener closes the UI', dapui_calls.close == 1, dapui_calls.close)
+check('the UI is never auto-closed', dapui_calls.close == 0, dapui_calls.close)
 
 -- Opt-out: ui = false registers nothing, even with nvim-dap-ui present.
 for _, when in ipairs({ 'launch', 'attach', 'event_terminated', 'event_exited' }) do
