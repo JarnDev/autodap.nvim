@@ -1,5 +1,5 @@
 *autodap.txt*
-                            For Neovim >= 0.10    Last change: 2026 October 02
+                                                            For Neovim >= 0.10
 
 ==============================================================================
 Table of Contents                                  *autodap-table-of-contents*
@@ -144,16 +144,16 @@ CONFIGURATION                             *autodap-autodap.nvim-configuration*
       -- first time you debug that language, not at startup (mirrors mason-lspconfig's
       -- `automatic_installation`). Set false to only ever use adapters on your PATH.
       auto_install = true,
-    
+
       -- Open nvim-dap-ui automatically when a session starts, if it is installed
       -- (it stays open after the program exits, for inspection). 'auto' = do it when
       -- present; false = never touch the UI (you open/close it yourself). autodap
       -- never calls dapui.setup() for you — that configuration stays yours.
       ui = 'auto',
-    
+
       -- Languages to handle. Drop one to leave its filetypes entirely to your own config.
       languages = { 'node', 'python', 'cpp' },
-    
+
       cpp = {
         adapter = 'codelldb',
         -- Directories scanned for prebuilt executables (globs allowed).
@@ -163,7 +163,7 @@ CONFIGURATION                             *autodap-autodap.nvim-configuration*
         auto_compile = true,
         compile_flags = { '-g', '-O0' },
       },
-    
+
       -- Extra CLI args appended to the "debug the test under the cursor" command,
       -- per framework. Escape hatch for version-specific flags — e.g. vitest may
       -- need { '--no-file-parallelism' } (or an older single-thread flag) for
