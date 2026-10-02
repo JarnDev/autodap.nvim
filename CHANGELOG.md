@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-02
+
 ### Fixed
 - nvim-dap-ui no longer closes automatically when the debuggee exits. It opened
   and then immediately closed on the program finishing, hiding the final scopes,
@@ -36,6 +38,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `:checkhealth autodap`.
 - `python.venv` to pin the interpreter.
 
-[Unreleased]: https://github.com/JarnDev/autodap.nvim/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/JarnDev/autodap.nvim/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.2.1
 [0.2.0]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.2.0
 [0.1.0]: https://github.com/JarnDev/autodap.nvim/releases/tag/v0.1.0
