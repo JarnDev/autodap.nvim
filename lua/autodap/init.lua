@@ -7,6 +7,11 @@ M.defaults = {
   -- machine lean (mirrors mason-lspconfig's `automatic_installation`). Requires
   -- mason.nvim; without it, autodap uses whatever adapter is already on PATH.
   auto_install = true,
+  -- Open nvim-dap-ui automatically when a debug session starts (and close it when
+  -- the session ends) if it is installed. 'auto' = do it when nvim-dap-ui is
+  -- present; false = never touch the UI (you manage it yourself). autodap never
+  -- calls dapui.setup() for you — that configuration stays yours.
+  ui = 'auto',
   languages = { 'node', 'python', 'cpp' },
   python = { venv = 'auto' },
   cpp = {
@@ -73,6 +78,27 @@ local function register_adapters(dap)
   end
 end
 
+-- Open nvim-dap-ui when a session starts and close it when the session ends, so
+-- <F5> brings the debugger UI up on its own. Opt-in via config.ui == 'auto' and
+-- only if nvim-dap-ui is actually installed — otherwise autodap leaves the UI
+-- alone. Listeners are namespaced ('autodap_ui') so they compose with any the
+-- user already registered, and dapui.open/close are idempotent. We never call
+-- dapui.setup() — that is the user's configuration; pcall keeps a not-yet-setup
+-- dapui from throwing a stack trace on the first launch.
+local function register_ui(dap)
+  if M.config.ui ~= 'auto' then
+    return
+  end
+  local ok, dapui = pcall(require, 'dapui')
+  if not ok then
+    return
+  end
+  dap.listeners.before.launch.autodap_ui = function() pcall(dapui.open) end
+  dap.listeners.before.attach.autodap_ui = function() pcall(dapui.open) end
+  dap.listeners.before.event_terminated.autodap_ui = function() pcall(dapui.close) end
+  dap.listeners.before.event_exited.autodap_ui = function() pcall(dapui.close) end
+end
+
 function M.setup(opts)
   M.config = vim.tbl_deep_extend('force', vim.deepcopy(M.defaults), opts or {})
   local ok, dap = pcall(require, 'dap')
@@ -81,6 +107,7 @@ function M.setup(opts)
     return
   end
   register_adapters(dap)
+  register_ui(dap)
   -- Register as a config provider rather than filling dap.configurations, so we
   -- compose with launch.json and any user-defined configs instead of clobbering.
   dap.providers.configs['autodap'] = function(bufnr)

@@ -6,6 +6,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Auto-open [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) when a debug
+  session starts and close it when the session ends, if it is installed. New
+  `ui` option (`'auto'` by default; `false` to leave the UI to you). autodap
+  does not call `dapui.setup()` for you.
+
 ## [0.1.0] - 2026-09-17
 
 ### Added

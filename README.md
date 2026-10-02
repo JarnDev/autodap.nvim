@@ -52,6 +52,9 @@ and configurations on the fly.
   test is detected and run in the debugger.
 - **Lazy adapter install** — missing adapters are fetched via
   [mason](https://github.com/williamboman/mason.nvim) on first use (optional).
+- **UI opens itself** — if [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui)
+  is installed, it opens when a session starts and closes when it ends, so your
+  debug key is all you press (optional; set `ui = false` to manage it yourself).
 
 | Language | Adapter | Discovered automatically |
 | --- | --- | --- |
@@ -66,6 +69,9 @@ and configurations on the fly.
 - [mason.nvim](https://github.com/williamboman/mason.nvim) — optional, for
   automatic adapter installation. Without it, autodap uses adapters already on
   your `PATH`.
+- [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui) — optional. When
+  present, autodap opens it on session start and closes it on session end. You
+  still configure (and `require('dapui').setup()`) it yourself.
 
 ## 📦 Installation
 
@@ -98,6 +104,12 @@ require('autodap').setup({
   -- first time you debug that language, not at startup (mirrors mason-lspconfig's
   -- `automatic_installation`). Set false to only ever use adapters on your PATH.
   auto_install = true,
+
+  -- Open nvim-dap-ui automatically when a session starts and close it when the
+  -- session ends, if nvim-dap-ui is installed. 'auto' = do it when present;
+  -- false = never touch the UI (you open/close it yourself). autodap never calls
+  -- dapui.setup() for you — that configuration stays yours.
+  ui = 'auto',
 
   -- Languages to handle. Drop one to leave its filetypes entirely to your own config.
   languages = { 'node', 'python', 'cpp' },
