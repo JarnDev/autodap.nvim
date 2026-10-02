@@ -6,6 +6,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- `:help autodap` no longer shows a "Last change" date on its title line. The
+  date was the generation date, so `make docs` and the CI staleness check
+  compared the documentation *and* a value that changes with the day or with
+  which commit CI happens to check out. The vimdoc is now a function of
+  `README.md` alone. Nothing else in the help text changed; the generator
+  (panvimdoc) is pinned to v6.0.0, which also drops trailing whitespace from
+  blank lines inside code blocks.
+
 ## [0.2.1] - 2026-10-02
 
 ### Fixed
