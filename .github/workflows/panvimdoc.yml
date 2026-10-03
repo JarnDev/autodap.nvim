@@ -20,7 +20,12 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false keeps the job's token out of .git/config.
+      # This job never pushes: `make docs` clones panvimdoc over anonymous
+      # https and the staleness check is a local `git diff`.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Regenerate with the SAME generator the maintainer runs locally
       # (`make docs`: pinned pandoc image + pinned panvimdoc + git-derived date),
