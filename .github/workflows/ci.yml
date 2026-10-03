@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
 
+# Least privilege: this job only reads the checkout. Without this block the
+# token would inherit the repository default, which can be write-all.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest

@@ -61,7 +61,7 @@ Notes:
 
 ## Workflows
 
-Two conventions apply to everything under `.github/workflows/`:
+Three conventions apply to everything under `.github/workflows/`:
 
 - **`persist-credentials: false` on every `actions/checkout`.** By default
   checkout writes the job's token into `.git/config` as an `http.extraheader`,
@@ -73,6 +73,10 @@ Two conventions apply to everything under `.github/workflows/`:
   `gh release create` as `GH_TOKEN: ${{ github.token }}`. Keep doing it that way
   rather than relying on a credential left in the config — if a new step needs to
   reach the remote, give it an explicit `env:` entry.
+- **An explicit top-level `permissions:` block in every file.** With no block the
+  token inherits the repository default, which can be write-all. `ci` and
+  `panvimdoc` take `contents: read`; `release` needs `contents: write` to publish.
+  Grant the narrowest scope the job actually uses.
 
 `zizmor` (via `qlty`) audits these files on any pull request that touches them.
 
