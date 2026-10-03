@@ -1,5 +1,5 @@
 *autodap.txt*
-                            For Neovim >= 0.10    Last change: 2026 October 02
+                            For Neovim >= 0.10    Last change: 2026 October 03
 
 ==============================================================================
 Table of Contents                                  *autodap-table-of-contents*
