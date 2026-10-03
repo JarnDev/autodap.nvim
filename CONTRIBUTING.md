@@ -59,6 +59,23 @@ Notes:
 - **Workflow scope.** Pushing changes under `.github/workflows/` needs a token
   with the `workflow` scope. A normal release (tag push, no workflow edits) does not.
 
+## Workflows
+
+Two conventions apply to everything under `.github/workflows/`:
+
+- **`persist-credentials: false` on every `actions/checkout`.** By default
+  checkout writes the job's token into `.git/config` as an `http.extraheader`,
+  where it stays for every later step and lands in anything that archives the
+  workspace. None of the three jobs needs it there: `ci` and `panvimdoc` only
+  read the checkout and clone their dependencies over anonymous https, and
+  `release` reads `CHANGELOG.md` and the demo assets.
+- **Hand the token to the one step that needs it.** `release.yml` passes it to
+  `gh release create` as `GH_TOKEN: ${{ github.token }}`. Keep doing it that way
+  rather than relying on a credential left in the config — if a new step needs to
+  reach the remote, give it an explicit `env:` entry.
+
+`zizmor` (via `qlty`) audits these files on any pull request that touches them.
+
 ## Commit messages
 
 Short, imperative, with a conventional-ish prefix (`feat:`, `fix:`, `docs:`,
