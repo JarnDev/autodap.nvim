@@ -9,7 +9,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false keeps the job's token out of .git/config.
+      # Nothing here talks to the remote: `make test` clones nvim-dap over
+      # anonymous https and the rest is local.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Neovim (stable)
         run: |

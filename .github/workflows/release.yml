@@ -13,7 +13,14 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false keeps the job's token out of .git/config.
+      # This job needs the checkout only to read CHANGELOG.md and the demo
+      # assets; it never pushes a commit or a tag (the tag already exists and is
+      # signed by a human -- see scripts/release.sh). The one step that does need
+      # the token, `gh release create`, gets it explicitly via GH_TOKEN below.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Build release notes
         run: |
