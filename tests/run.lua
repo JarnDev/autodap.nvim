@@ -122,6 +122,25 @@ else
   print('  skip - no C compiler on PATH')
 end
 
+-- CPP compile_flags.txt: the nearest one above the file feeds the single-file
+-- build (here -std=c++20 for std::span and a relative -I resolved from its dir).
+print('[cpp / compile_flags.txt]')
+if vim.fn.executable('c++') == 1 or vim.fn.executable('g++') == 1 or vim.fn.executable('clang++') == 1 then
+  local ptmp = vim.fn.tempname()
+  vim.fn.mkdir(ptmp .. '/inc', 'p')
+  vim.fn.mkdir(ptmp .. '/src', 'p')
+  vim.fn.writefile({ '-std=c++20', '', '# comment', '-Iinc' }, ptmp .. '/compile_flags.txt')
+  vim.fn.writefile({ '#include <span>', 'inline int first(std::span<const int> v) { return v[0]; }' }, ptmp .. '/inc/lib.hpp')
+  vim.fn.writefile({ '#include "lib.hpp"', 'int main() { int a[] = {7}; return first(a) == 7 ? 0 : 1; }' }, ptmp .. '/src/main.cpp')
+  local flags, dir = cpp.project_flags(ptmp .. '/src/main.cpp')
+  check('compile_flags.txt found upward and parsed', dir == ptmp and vim.deep_equal(flags, { '-std=c++20', '-Iinc' }), vim.inspect(flags))
+  local pbin = cpp.compile_single(ptmp .. '/src/main.cpp', 'cpp', autodap.config)
+  check('C++20 file with relative -I compiles via compile_flags.txt', pbin ~= nil and vim.fn.executable(pbin) == 1, pbin)
+  check('no compile_flags.txt -> no extra flags', #cpp.project_flags(vim.fn.tempname() .. '/x.cpp') == 0)
+else
+  print('  skip - no C++ compiler on PATH')
+end
+
 -- SINGLE FILE: a loose file with no project markers at all still debugs — the
 -- large-project focus is additive, never a gate on the basic launch config.
 print('[single file / no project]')

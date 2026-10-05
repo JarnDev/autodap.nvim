@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- Single-file C/C++ auto-compile honors the nearest `compile_flags.txt` (the clangd convention):
+  its flags (for example `-std=c++20` or `-Iinc`) are passed to the compiler, with relative paths
+  resolved from that file's directory. The `-g -O0` debug flags still come last.
+
 ### Changed
 - `:help autodap` no longer shows a "Last change" date on its title line. The
   date was the generation date, so `make docs` and the CI staleness check

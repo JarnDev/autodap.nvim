@@ -124,9 +124,29 @@ local function cache_dir()
   return d
 end
 
+-- Flags from the nearest compile_flags.txt above `src` (the clangd convention:
+-- one flag per line, relative paths resolved from the file's own directory).
+-- Returns the flag list and that directory, or {} and nil when there is none.
+function M.project_flags(src)
+  local found = vim.fs.find('compile_flags.txt', { upward = true, path = vim.fs.dirname(src) })[1]
+  if not found then
+    return {}, nil
+  end
+  local flags = {}
+  for _, line in ipairs(vim.fn.readfile(found)) do
+    line = vim.trim(line)
+    if line ~= '' and not line:match('^#') then
+      table.insert(flags, line)
+    end
+  end
+  return flags, vim.fs.dirname(found)
+end
+
 -- Compile a single translation unit with debug info so a lone .c/.cpp is
--- debuggable without any build system. Returns the binary path, or nil on
--- failure (missing compiler / compile error, both reported to the user).
+-- debuggable without any build system. The project's compile_flags.txt (e.g.
+-- -std=c++20, include dirs) is honored, so the debug build matches what clangd
+-- and the project expect. Returns the binary path, or nil on failure (missing
+-- compiler / compile error, both reported to the user).
 function M.compile_single(src, ft, cfg)
   if ft ~= 'c' and ft ~= 'cpp' then
     return nil
@@ -139,14 +159,19 @@ function M.compile_single(src, ft, cfg)
     vim.notify('[autodap] no C/C++ compiler found on PATH', vim.log.levels.WARN)
     return nil
   end
-  local flags = (cfg and cfg.cpp and cfg.cpp.compile_flags) or { '-g', '-O0' }
+  src = vim.fn.fnamemodify(src, ':p')
+  local project, flags_dir = M.project_flags(src)
+  -- Debug flags last, so -g -O0 win over an -O2 in the project's flags.
+  local debug = (cfg and cfg.cpp and cfg.cpp.compile_flags) or { '-g', '-O0' }
   local out = ('%s/%s-%s'):format(cache_dir(), vim.fn.fnamemodify(src, ':t:r'), vim.fn.sha256(src):sub(1, 8))
   local cmd = { cc }
-  vim.list_extend(cmd, flags)
+  vim.list_extend(cmd, project)
+  vim.list_extend(cmd, debug)
   vim.list_extend(cmd, { src, '-o', out })
-  local result = vim.fn.system(cmd)
-  if vim.v.shell_error ~= 0 then
-    vim.notify('[autodap] compile failed:\n' .. result, vim.log.levels.ERROR)
+  -- Run from compile_flags.txt's directory so its relative paths (-Iinc) resolve.
+  local r = vim.system(cmd, { cwd = flags_dir, text = true }):wait()
+  if r.code ~= 0 then
+    vim.notify('[autodap] compile failed:\n' .. (r.stderr or '') .. (r.stdout or ''), vim.log.levels.ERROR)
     return nil
   end
   return out
