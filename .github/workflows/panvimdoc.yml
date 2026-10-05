@@ -23,7 +23,9 @@ jobs:
       - uses: actions/checkout@v4
 
       # Regenerate with the SAME generator the maintainer runs locally
-      # (`make docs`: pinned pandoc image + pinned panvimdoc + git-derived date),
+      # (`make docs`: pinned pandoc image + pinned panvimdoc, and no date at all
+      # -- a date would make this job compare the docs *and* a value each side
+      # derives differently; see the `nodate` note in the Makefile),
       # rather than a separate action whose version/whitespace could drift out of
       # step with the committed file. Byte-identical by construction.
       - name: Regenerate vimdoc with make docs
