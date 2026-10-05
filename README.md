@@ -223,16 +223,20 @@ provider and adapter API.
 
 A second suite debugs for real — it builds a throwaway Neovim config containing
 nothing but nvim-dap and autodap, installs them the way the install section
-above tells you to, then sets a breakpoint in a sample Python and a sample Node
-project, launches debugpy and js-debug, reads a local out of each stopped frame
-and runs both to completion:
+above tells you to, then sets a breakpoint in a sample Python, Node and C/C++
+project, launches debugpy, js-debug and codelldb, reads a local out of each
+stopped frame and runs each to completion:
 
 ```sh
 make test-e2e
 ```
 
-It writes only to a temporary directory (your own config and plugins are never
-touched) and runs in CI on every push.
+Your own config and plugins are never touched — everything the suite builds
+lives in a temporary directory, with one exception: codelldb is a ~55 MB
+download, so it is cached in `${XDG_CACHE_HOME:-~/.cache}/autodap-e2e` and
+reused by later runs. Delete that directory to force a re-download. A language
+whose toolchain is missing is skipped with a printed reason rather than failing.
+The suite runs in CI on every push.
 
 ## 🩺 Help & health
 
