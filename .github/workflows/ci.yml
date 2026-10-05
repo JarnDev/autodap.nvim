@@ -42,7 +42,12 @@ jobs:
     env:
       CODELLDB_VERSION: v1.12.3
     steps:
+      # persist-credentials: false keeps the job's token out of .git/config.
+      # This job runs a real debug session against a throwaway config; nothing
+      # in it talks to the remote with the workflow token.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install Neovim (stable)
         run: |
