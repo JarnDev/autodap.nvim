@@ -28,12 +28,25 @@ make docs
 ```
 
 This runs pandoc in Docker (no local pandoc needed). Every input is pinned — the
-pandoc image, the panvimdoc version, and the "Last change" date (taken from the
-last commit via git, not the wall clock) — and CI runs this very same `make docs`
+pandoc image and the panvimdoc version — and CI runs this very same `make docs`
 target and diffs the result, so the output is byte-identical by construction.
 Commit `doc/autodap.txt` alongside the README change — CI fails when the
 committed vimdoc is stale. (`doc/tags` is generated locally and gitignored; only
 `doc/autodap.txt` is tracked.)
+
+The title line carries no "Last change" date, on purpose (`nodate:true`). The
+generated file has to match byte for byte on both sides, and you generate it
+*before* you commit, so there is no date the two sides can agree on: the wall
+clock differs by the day, `git log -1` is the commit before yours locally and
+your own commit in CI, and on a pull request CI regenerates from GitHub's merge
+commit, whose date moves whenever the base branch does. Dropping the stamp
+leaves the output a function of `README.md` alone — the only thing that makes
+the comparison meaningful. `git log -- doc/autodap.txt` answers "when did the
+docs change" properly, and Vim's `help-writing` treats the date as optional.
+
+When bumping `PANVIMDOC_REF` or `PANDOC_IMAGE`, run `make docs` and commit the
+result in the same commit: a generator bump usually changes the output, and CI
+compares against whatever is pinned on your branch.
 
 ## Releasing
 
