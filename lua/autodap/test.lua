@@ -94,8 +94,12 @@ end
 
 -- ---- nearest test extraction ------------------------------------------------
 
--- Nearest it()/test()/describe() above the cursor. Regex-based (no Treesitter
--- dependency); handles modifiers like it.only / test.each.
+-- Nearest it()/test()/describe() above the cursor. This is the fallback for
+-- buffers with no treesitter parser (see autodap.ts for the primary path); it
+-- handles modifiers like it.only / test.each, but it reads one line at a time,
+-- so it knows nothing about nesting or about the enclosing suites. `path` holds
+-- that single title in the shape autodap.ts emits, so the config builder below
+-- does not have to care which resolver answered.
 local function js_nearest(bufnr, cursor_row)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, cursor_row, false)
   for i = #lines, 1, -1 do
@@ -103,7 +107,11 @@ local function js_nearest(bufnr, cursor_row)
     for _, kw in ipairs({ 'it', 'test', 'describe' }) do
       local title = line:match('%f[%a]' .. kw .. "[%.%w]*%s*%(%s*['\"`]([^'\"`]+)")
       if title then
-        return { title = title, kind = kw == 'describe' and 'suite' or 'test' }
+        return {
+          title = title,
+          kind = kw == 'describe' and 'suite' or 'test',
+          path = { { { text = title, literal = true } } },
+        }
       end
     end
   end
@@ -112,6 +120,7 @@ end
 
 -- Nearest `def test_*` above the cursor and its enclosing `class Test*`, as the
 -- pytest node-id suffix `<Class>::<func>` (class omitted for module-level tests).
+-- Same deal: the fallback for when there is no python parser.
 local function py_nearest(bufnr, cursor_row)
   local lines = vim.api.nvim_buf_get_lines(bufnr, 0, cursor_row, false)
   local func_i, func, func_indent
@@ -133,7 +142,49 @@ local function py_nearest(bufnr, cursor_row)
       break
     end
   end
-  return { suffix = (cls and (cls .. '::') or '') .. func }
+  return { suffix = (cls and (cls .. '::') or '') .. func, kind = 'test' }
+end
+
+-- Treesitter first; the regex scanner only when the buffer's language has no
+-- parser. autodap.ts returns a language exactly when it was able to look, which
+-- is what distinguishes "no test here" from "cannot tell".
+local function nearest(bufnr, ft, cursor_row, cursor_col)
+  local near, lang = require('autodap.ts').nearest(bufnr, cursor_row, cursor_col)
+  if lang then
+    return near
+  end
+  if ft == 'python' then
+    return py_nearest(bufnr, cursor_row)
+  end
+  return js_nearest(bufnr, cursor_row)
+end
+
+-- Filetypes autodap can run a test from, and the treesitter language name to
+-- suggest when the buffer has no parser for it.
+local REGEX_LANG = {
+  python = 'python',
+  javascript = 'javascript',
+  javascriptreact = 'javascript',
+  ['javascript.jsx'] = 'javascript',
+  typescript = 'typescript',
+  typescriptreact = 'tsx',
+  ['typescript.tsx'] = 'tsx',
+}
+
+-- Which resolver `config()` would use for this buffer, and the language to name
+-- in the report: 'treesitter', <parser lang> when one is installed; 'regex',
+-- <lang to install> when not; nil for buffers autodap runs no tests from.
+function M.resolver(bufnr)
+  bufnr = (bufnr and bufnr ~= 0) and bufnr or vim.api.nvim_get_current_buf()
+  local ft = vim.bo[bufnr].filetype
+  if not REGEX_LANG[ft] then
+    return nil
+  end
+  local lang = require('autodap.ts').lang(bufnr)
+  if lang then
+    return 'treesitter', lang
+  end
+  return 'regex', REGEX_LANG[ft]
 end
 
 -- ---- config building --------------------------------------------------------
@@ -142,6 +193,23 @@ end
 -- so it matches literally.
 local function js_regex_escape(s)
   return (s:gsub('[%^%$%(%)%[%]%{%}%.%*%+%?%|%\\]', '\\%0'))
+end
+
+-- `-t` is matched against the *full* name — the enclosing describes plus the
+-- test — but jest and vitest join those with different separators, so the parts
+-- are stitched with `.*` rather than a guessed separator. Parts the source does
+-- not pin down (a `${}` substitution, an `.each` placeholder) are `.*` too, so a
+-- parametrised test still matches every row rather than nothing.
+local function js_pattern(path)
+  local segments = {}
+  for _, parts in ipairs(path) do
+    local out = {}
+    for _, p in ipairs(parts) do
+      out[#out + 1] = p.literal and js_regex_escape(p.text) or '.*'
+    end
+    segments[#segments + 1] = table.concat(out)
+  end
+  return table.concat(segments, '.*')
 end
 
 local function extra_args(fw)
@@ -153,11 +221,12 @@ local function extra_args(fw)
   return (t and t.extra_args and t.extra_args[fw]) or {}
 end
 
--- Cursor row of the window showing `bufnr`. "Under the cursor" only means
--- something for a displayed buffer, so a hidden buffer yields no test config.
--- Windows in other tabpages count too, so `:checkhealth` (which opens its own
--- tab) can still report the test under your cursor.
-local function cursor_row_for(bufnr)
+-- Cursor position (1-based row, 0-based column) in the window showing `bufnr`.
+-- "Under the cursor" only means something for a displayed buffer, so a hidden
+-- buffer yields no test config. Windows in other tabpages count too, so
+-- `:checkhealth` (which opens its own tab) can still report the test under your
+-- cursor.
+local function cursor_pos_for(bufnr)
   local win = vim.fn.bufwinid(bufnr)
   if win == -1 then
     win = vim.fn.win_findbuf(bufnr)[1]
@@ -165,7 +234,8 @@ local function cursor_row_for(bufnr)
   if not win or win == -1 then
     return nil
   end
-  return vim.api.nvim_win_get_cursor(win)[1]
+  local pos = vim.api.nvim_win_get_cursor(win)
+  return pos[1], pos[2]
 end
 
 -- Build a dap config for the test under the cursor, or nil if there is none.
@@ -174,7 +244,7 @@ function M.config(bufnr)
   local detect = require('autodap.detect')
   local file = vim.api.nvim_buf_get_name(bufnr)
   local ft = vim.bo[bufnr].filetype
-  local cursor_row = cursor_row_for(bufnr)
+  local cursor_row, cursor_col = cursor_pos_for(bufnr)
   if not cursor_row then
     return nil
   end
@@ -183,7 +253,7 @@ function M.config(bufnr)
     if not is_py_test_file(file) then
       return nil
     end
-    local near = py_nearest(bufnr, cursor_row)
+    local near = nearest(bufnr, ft, cursor_row, cursor_col)
     if not near then
       return nil
     end
@@ -193,7 +263,7 @@ function M.config(bufnr)
     return {
       type = 'python',
       request = 'launch',
-      name = 'Debug test: ' .. near.suffix,
+      name = (near.kind == 'suite' and 'Debug suite: ' or 'Debug test: ') .. near.suffix,
       module = 'pytest',
       args = args,
       cwd = root,
@@ -209,12 +279,12 @@ function M.config(bufnr)
     if not fw then
       return nil
     end
-    local near = js_nearest(bufnr, cursor_row)
+    local near = nearest(bufnr, ft, cursor_row, cursor_col)
     if not near then
       return nil
     end
     local label = (near.kind == 'suite' and 'Debug suite: ' or 'Debug test: ') .. near.title
-    local pattern = js_regex_escape(near.title)
+    local pattern = js_pattern(near.path)
     if fw == 'jest' then
       local args = { file, '-t', pattern, '--runInBand' }
       vim.list_extend(args, extra_args('jest'))

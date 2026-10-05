@@ -106,9 +106,22 @@ local function check_buffer()
     end
   end
 
-  local tcfg = require('autodap.test').config(bufnr)
+  local test = require('autodap.test')
+  local tcfg = test.config(bufnr)
   if tcfg then
     H.ok('test under cursor: ' .. tcfg.name)
+  end
+  -- Which nearest-test resolver this buffer gets. Worth saying even when there
+  -- is no test under the cursor: it is the difference between understanding
+  -- nested, decorated and parametrised tests and guessing at them line by line.
+  local source, tslang = test.resolver(bufnr)
+  if source == 'treesitter' then
+    H.ok(('nearest-test detection: treesitter (%s parser)'):format(tslang))
+  elseif source == 'regex' then
+    H.warn('nearest-test detection: regex fallback — no treesitter parser for this buffer', {
+      ('Install the %s parser (`:TSInstall %s`) to handle nested, decorated and parametrised tests')
+        :format(tslang, tslang),
+    })
   end
 end
 

@@ -48,8 +48,10 @@ and configurations on the fly.
   `tsx`/`ts-node` and virtualenvs resolve through hoisted layouts.
 - **Works on loose files too** — the project support is additive; a lone `.js`,
   `.py`, or `.c` with no project still gets a launch config.
-- **Debug the test under the cursor** — jest, vitest, and pytest; the nearest
-  test is detected and run in the debugger.
+- **Debug the test under the cursor** — jest, vitest, and pytest; the test you
+  are in is resolved with Treesitter (nested suites, decorators, parametrised
+  titles) and run in the debugger, with a regex fallback when no parser is
+  installed.
 - **Lazy adapter install** — missing adapters are fetched via
   [mason](https://github.com/williamboman/mason.nvim) on first use (optional).
 - **UI opens itself** — if [nvim-dap-ui](https://github.com/rcarriga/nvim-dap-ui)
@@ -176,11 +178,31 @@ detected from the project:
 vim.keymap.set('n', '<leader>dt', function() require('autodap').debug_test() end)
 ```
 
-It finds the nearest test above the cursor (`it`/`test`/`describe` for JS,
-`def test_*` and its enclosing `class` for pytest) and launches just that test.
-The same entry also shows up at the top of the `<F5>` picker when you're in a
-test file. If breakpoints don't bind on a given framework version, add flags via
-`test.extra_args`.
+It finds the innermost test the cursor is actually *inside* and launches just
+that one. The same entry also shows up at the top of the `<F5>` picker when
+you're in a test file. If breakpoints don't bind on a given framework version,
+add flags via `test.extra_args`.
+
+Resolution is Treesitter-based where a parser for the buffer's language is
+installed, which is what makes the awkward cases come out right:
+
+- nested `describe`s contribute to the `-t` pattern, so a test title that
+  appears in two suites still runs only the one you are in;
+- a cursor on a `@pytest.mark.parametrize` decorator resolves to the test it
+  decorates, not to whatever came before it;
+- nested `class Test*` produce the full `Outer::Inner::test_x` node id;
+- a `def` nested inside a test is not mistaken for a test of its own;
+- when several tests share a line — `it('a', fn); it('b', fn);` — the one at the
+  cursor column is the one that runs; a neighbour on the same line is never
+  treated as an enclosing suite;
+- parametrised titles (`` it.each ``'s `%s`/`$column`, and `${}` in template
+  literals) become wildcards in the pattern, so every row matches instead of
+  none.
+
+Treesitter is **not** a dependency. With no parser installed, autodap falls back
+to the line-based regex scanner it has always used — `it`/`test`/`describe` for
+JS, `def test_*` and its enclosing `class` for pytest. `:checkhealth autodap`
+says which of the two your buffer gets.
 
 ### Commands
 
@@ -198,12 +220,15 @@ test file. If breakpoints don't bind on a given framework version, add flags via
   a multi-file project — point it at your build system's output.
 - Test-under-cursor for JS is version-sensitive (jest uses `--runInBand`; vitest
   breakpoints may need a single-thread flag depending on the version) — use
-  `test.extra_args` to tune. Nearest-test detection is regex-based, not Treesitter.
+  `test.extra_args` to tune.
+- Nearest-test detection uses Treesitter where a parser is installed and a
+  line-based regex scanner otherwise; the fallback cannot see nesting,
+  decorators, or parametrised titles. `:checkhealth autodap` reports which one
+  your buffer is getting.
 - No Rust/Go yet.
 
 ## 🗺️ Roadmap
 
-- Treesitter-based nearest-test detection.
 - Auto-continue after a mason install finishes (`pkg:once('install:success')`).
 - Rust (codelldb) and Go (delve).
 - Optional CMake File API query bootstrap when no reply exists yet.
@@ -219,7 +244,12 @@ make test
 ```
 
 The first run clones `nvim-dap` into `tests/.deps/` so the tests hit the real
-provider and adapter API.
+provider and adapter API, and builds pinned Treesitter parsers for Python,
+JavaScript and TypeScript there with your C compiler, so the nearest-test cases
+run against real parse trees. With no compiler (or no network) those cases
+report themselves as skipped and the regex fallback is covered instead; CI sets
+`AUTODAP_REQUIRE_TREESITTER=1`, which turns that skip into a failure so the
+Treesitter path cannot silently stop being tested.
 
 A second suite debugs for real — it builds a throwaway Neovim config containing
 nothing but nvim-dap and autodap, installs them the way the install section
@@ -243,7 +273,8 @@ The suite runs in CI on every push.
 - `:help autodap` — the full docs (generated from this README).
 - `:checkhealth autodap` — verifies Neovim, nvim-dap and mason, shows which
   adapters are installed, and prints what autodap detects for the current buffer
-  (language, project root, C/C++ targets, the test under the cursor). Run it
+  (language, project root, C/C++ targets, the test under the cursor, and whether
+  nearest-test detection is using Treesitter or the regex fallback). Run it
   first when something isn't picked up.
 
 ## 🔌 Similar plugins
