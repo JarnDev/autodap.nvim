@@ -1,4 +1,4 @@
-.PHONY: test docs docs-check release release-dry
+.PHONY: test test-e2e docs docs-check release release-dry
 
 # Pin every input to the doc generation so `make docs` is deterministic and
 # byte-identical between your machine and CI: the pandoc image and the panvimdoc
@@ -11,6 +11,12 @@ PANVIMDOC_DIR  := .deps/panvimdoc-$(PANVIMDOC_REF)
 
 test:
 	nvim --headless -u tests/minimal_init.lua -l tests/run.lua
+
+# Drive a real debug session from a throwaway Neovim config (clean XDG dirs,
+# lazy.nvim, nvim-dap, a sample project and debugpy fetched into a temp dir).
+# Needs network on the first run; changes nothing outside $$TMPDIR.
+test-e2e:
+	scripts/e2e.sh
 
 # Cut a release: bump CHANGELOG, then create a signed commit and signed tag.
 # The tag is NOT pushed for you — review, then `git push origin main vX.Y.Z`,

@@ -1,6 +1,6 @@
 tests/.deps/
 .deps/
 
-# Vim help tags — generated locally (and by plugin managers on install); only
-# doc/autodap.txt is tracked.
+# Vim help tags — generated locally (by plugin managers on install, and by
+# `make test-e2e`); only doc/autodap.txt is tracked.
 doc/tags

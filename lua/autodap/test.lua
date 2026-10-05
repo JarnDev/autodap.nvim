@@ -155,9 +155,14 @@ end
 
 -- Cursor row of the window showing `bufnr`. "Under the cursor" only means
 -- something for a displayed buffer, so a hidden buffer yields no test config.
+-- Windows in other tabpages count too, so `:checkhealth` (which opens its own
+-- tab) can still report the test under your cursor.
 local function cursor_row_for(bufnr)
   local win = vim.fn.bufwinid(bufnr)
   if win == -1 then
+    win = vim.fn.win_findbuf(bufnr)[1]
+  end
+  if not win or win == -1 then
     return nil
   end
   return vim.api.nvim_win_get_cursor(win)[1]

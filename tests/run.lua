@@ -207,6 +207,22 @@ check(
 )
 check('pytest: interpreter from project venv', pt ~= nil and pt.pythonPath:find('.venv/bin/python', 1, true) ~= nil, pt and pt.pythonPath)
 
+-- :checkhealth opens its own tabpage, so the buffer it asks about lives in a
+-- window somewhere else. The nearest test must still be found from there.
+print('[test / buffer in another tabpage]')
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+vim.bo.filetype = 'python'
+vim.api.nvim_win_set_cursor(0, { 3, 0 })
+local other_tab_buf = vim.api.nvim_get_current_buf()
+vim.cmd('tabnew')
+local tt = testmod.config(other_tab_buf)
+check(
+  'test under cursor found from a different tabpage',
+  tt ~= nil and tt.args[1] == 'tests/test_math.py::TestMath::test_add',
+  tt and tt.args[1]
+)
+vim.cmd('tabclose')
+
 print('[test / non-test file]')
 vim.cmd.edit(fx .. '/node-monorepo/packages/app/src/index.ts')
 vim.bo.filetype = 'typescript'
@@ -252,6 +268,42 @@ end
 autodap.setup({ auto_install = false, ui = false })
 check('ui=false registers no UI listeners', dap.listeners.before.launch.autodap_ui == nil)
 package.loaded.dapui = nil
+
+-- An adapter the user registered first is left alone, and autodap knows it is
+-- not ours — the install guard must not block a session on a binary we would
+-- never launch.
+local mine = function(cb) cb({ type = 'executable', command = 'my-own-debugpy' }) end
+dap.adapters.python = mine
+autodap.setup({ auto_install = false })
+check('a pre-existing adapter is not clobbered', dap.adapters.python == mine)
+check('autodap reports it does not own that adapter', autodap.owns('python') == false)
+check('autodap still owns the ones it registered', autodap.owns('cpp') == true)
+dap.adapters.python = nil
+autodap.setup({ auto_install = false })
+check('autodap owns the adapter again once the user drops theirs', autodap.owns('python') == true)
+
+-- The install guard's three outcomes. 'installing' is the only one that should
+-- ever tell the user to run again; with auto_install off nothing is installing,
+-- so the message has to be actionable instead.
+print('[install guard]')
+local install = require('autodap.install')
+check(
+  'auto_install = false reports unavailable, not installing',
+  install.ensure('python', { auto_install = false }) == 'unavailable'
+    or install.available('python'), -- adapter present on this machine: nothing to report
+  install.ensure('python', { auto_install = false })
+)
+check(
+  'missing mason reports unavailable rather than a phantom install',
+  install.ensure('python', { auto_install = true }) == 'unavailable' or install.available('python'),
+  install.ensure('python', { auto_install = true })
+)
+check(
+  'hint names both the mason package and the binary',
+  install.install_hint('python'):find('debugpy', 1, true) ~= nil
+    and install.install_hint('python'):find('debugpy-adapter', 1, true) ~= nil,
+  install.install_hint('python')
+)
 
 print(('\n%d failure(s)'):format(failures))
 if failures > 0 then

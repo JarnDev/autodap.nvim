@@ -42,28 +42,35 @@ function M.available(lang)
   return M.bin_path(lang) ~= nil
 end
 
+-- How to tell the user to get `lang`'s adapter by hand, when autodap cannot.
+function M.install_hint(lang)
+  local entry = M.registry[lang]
+  if not entry then
+    return 'install the debug adapter for ' .. lang
+  end
+  return ('install it with :MasonInstall %s, or put %s on your PATH')
+    :format(entry.mason, entry.bin)
+end
+
 -- Best-effort, on-demand, non-blocking install through mason when the adapter is
--- missing. Returns true only when the adapter is already available right now; a
--- kicked-off install returns false so callers can tell the user to retry.
+-- missing. Returns one of:
+--   'available'   the adapter is usable right now — go ahead and debug
+--   'installing'  an install was kicked off; the caller should ask for a retry
+--   'unavailable' nothing was started (auto_install off, or mason missing)
 function M.ensure(lang, opts)
   if M.available(lang) then
-    return true
+    return 'available'
   end
   if not (opts and opts.auto_install) then
-    return false
+    return 'unavailable'
   end
   local entry = M.registry[lang]
   if not entry then
-    return false
+    return 'unavailable'
   end
   local ok, reg = pcall(require, 'mason-registry')
   if not ok then
-    vim.notify(
-      ('[autodap] %s missing and mason is unavailable — install %s manually')
-        :format(entry.bin, entry.mason),
-      vim.log.levels.WARN
-    )
-    return false
+    return 'unavailable'
   end
   local function do_install()
     if reg.is_installed(entry.mason) then
@@ -78,7 +85,7 @@ function M.ensure(lang, opts)
   else
     do_install()
   end
-  return false
+  return 'installing'
 end
 
 return M

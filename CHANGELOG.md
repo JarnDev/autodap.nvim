@@ -7,6 +7,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- End-to-end suite (`make test-e2e`): drives real debugpy and js-debug sessions
+  from a throwaway Neovim config — breakpoint, locals, run to completion — and
+  runs in CI alongside the config-generation tests.
+- The end-to-end suite now covers C/C++ with real codelldb sessions, in both
+  shapes autodap handles: a built project it discovers the executable in, and a
+  lone `.c` file it compiles itself. Skipped with a printed reason when no
+  compiler is present; CI runs it and caches the codelldb download.
 - Single-file C/C++ auto-compile honors the nearest `compile_flags.txt` (the clangd convention):
   its flags (for example `-std=c++20` or `-Iinc`) are passed to the compiler, with relative paths
   resolved from that file's directory. The `-g -O0` debug flags still come last.
@@ -19,6 +26,18 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `README.md` alone. Nothing else in the help text changed; the generator
   (panvimdoc) is pinned to v6.0.0, which also drops trailing whitespace from
   blank lines inside code blocks.
+
+### Fixed
+- `continue()` and `debug_test()` no longer refuse to start when *you* registered
+  the adapter: the install guard only applies to adapters autodap registered itself.
+- The "installing the adapter — run again once it finishes" notice is now only
+  shown when an install actually started. With `auto_install = false`, or without
+  mason, autodap names the package to install by hand instead.
+- `:checkhealth autodap` inspected its own report buffer, so its "current buffer"
+  section never described the file you were editing. It now reports on the file
+  you came from, including the test under the cursor.
+- `:checkhealth autodap` reports adapters owned by your own config as such, and
+  distinguishes "will install on first use" from "will never be installed".
 
 ## [0.2.1] - 2026-10-02
 

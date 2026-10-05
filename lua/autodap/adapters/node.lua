@@ -2,14 +2,21 @@ local M = {}
 local install = require('autodap.install')
 local util = require('autodap.util')
 
+-- The adapter function we installed, so a second setup() can tell its own
+-- registration apart from one the user made.
+local ours
+
 -- Lazy (function-form) adapter: resolves the binary at launch time, so a
 -- mason install that finishes after startup is used without a restart.
+-- Returns true when autodap owns the adapter, false when we left an existing
+-- one alone.
 function M.register(dap, _)
   -- Don't clobber an adapter the user (or mason-nvim-dap) already registered.
-  if dap.adapters['pwa-node'] ~= nil then
-    return
+  local current = dap.adapters['pwa-node']
+  if current ~= nil and current ~= ours then
+    return false
   end
-  dap.adapters['pwa-node'] = function(cb)
+  ours = function(cb)
     cb({
       type = 'server',
       host = 'localhost',
@@ -20,6 +27,8 @@ function M.register(dap, _)
       },
     })
   end
+  dap.adapters['pwa-node'] = ours
+  return true
 end
 
 -- Resolve tsx/ts-node walking `node_modules` upward — hoisted workspaces
