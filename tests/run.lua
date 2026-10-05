@@ -262,6 +262,14 @@ local function arg_after(cfg, flag)
   return nil
 end
 
+-- Put the cursor on the first occurrence of `text` on line `lnum` of the current
+-- buffer, rather than hard-coding a column the fixture could drift away from.
+local function cursor_on(lnum, text)
+  local line = vim.api.nvim_buf_get_lines(0, lnum - 1, lnum, false)[1] or ''
+  local i = assert(line:find(text, 1, true), ('%q is not on line %d'):format(text, lnum))
+  vim.api.nvim_win_set_cursor(0, { lnum, i - 1 })
+end
+
 if not have_parsers then
   print('[test / treesitter]')
   if vim.env.AUTODAP_REQUIRE_TREESITTER ~= nil and vim.env.AUTODAP_REQUIRE_TREESITTER ~= '' then
@@ -322,6 +330,38 @@ else
     modlevel and modlevel.args[1]
   )
 
+  -- Column 0 of an indented `def` line is to the *left* of the definition's
+  -- range. It still means that test, not the class around it.
+  vim.api.nvim_win_set_cursor(0, { 14, 0 })
+  local indent = testmod.config(0)
+  check(
+    'pytest: column 0 of an indented def line is still that test',
+    indent ~= nil and indent.args[1] == 'tests/test_nested.py::TestOuter::test_outer_only',
+    indent and indent.args[1]
+  )
+
+  print('[test / treesitter :: python one-liners]')
+  vim.cmd.edit(fx .. '/pytest-proj/tests/test_compact.py')
+  vim.bo.filetype = 'python'
+
+  cursor_on(5, 'def test_two')
+  local compact_two = testmod.config(0)
+  check(
+    'pytest: a one-line def body still picks up its enclosing class',
+    compact_two ~= nil and compact_two.args[1] == 'tests/test_compact.py::TestCompact::test_two',
+    compact_two and compact_two.args[1]
+  )
+
+  -- Same method name in two classes: the enclosing class must come from the
+  -- tree, not from whichever `class Test*` happens to sit above the cursor.
+  cursor_on(9, 'def test_one')
+  local compact_other = testmod.config(0)
+  check(
+    'pytest: a repeated method name resolves against its own class',
+    compact_other ~= nil and compact_other.args[1] == 'tests/test_compact.py::TestOther::test_one',
+    compact_other and compact_other.args[1]
+  )
+
   print('[test / treesitter :: node]')
   vim.cmd.edit(fx .. '/jest-proj/nested.test.js')
   vim.bo.filetype = 'javascript'
@@ -371,6 +411,65 @@ else
     'jest: a cursor outside every it() resolves to the enclosing suite',
     suite ~= nil and suite.name == 'Debug suite: outer suite',
     suite and suite.name
+  )
+
+  -- Column 0 of an indented it() line is to the left of the call's range, so the
+  -- enclosing describe would contain the cursor and the test would not.
+  vim.api.nvim_win_set_cursor(0, { 3, 0 })
+  local js_indent = testmod.config(0)
+  check(
+    'jest: column 0 of an indented it() line is still that test',
+    js_indent ~= nil and js_indent.name == 'Debug test: outer suite > inner suite > adds (two) numbers',
+    js_indent and js_indent.name
+  )
+
+  -- SAME-LINE SIBLINGS. Row-only ranges make `first` look like an ancestor of
+  -- `second`, and the pattern that comes out (`first.*second`) matches neither
+  -- real test name, so the debug session runs nothing.
+  print('[test / treesitter :: one-line siblings]')
+  vim.cmd.edit(fx .. '/jest-proj/compact.test.js')
+  vim.bo.filetype = 'javascript'
+
+  cursor_on(5, "it('second'")
+  local second = testmod.config(0)
+  local second_t = second and arg_after(second, '-t')
+  check(
+    'jest: a test sharing a line with its sibling resolves to itself',
+    second ~= nil and second.name == 'Debug test: alpha > second',
+    second and second.name
+  )
+  check(
+    'jest: the sibling on the same line is not treated as an enclosing suite',
+    second_t ~= nil and matches(second_t, 'alpha > second') and not matches(second_t, 'alpha > first'),
+    second_t
+  )
+
+  cursor_on(5, "it('first'")
+  local first_t = arg_after(testmod.config(0) or {}, '-t')
+  check(
+    'jest: the earlier test on that line is reachable too',
+    first_t ~= nil and matches(first_t, 'alpha > first') and not matches(first_t, 'alpha > second'),
+    first_t
+  )
+
+  -- A whole suite chain on one line: the describes enclose the test by nesting,
+  -- not by occupying different rows.
+  cursor_on(6, "it('third'")
+  local third_t = arg_after(testmod.config(0) or {}, '-t')
+  check(
+    'jest: a one-line describe chain is still the full -t path',
+    third_t ~= nil and matches(third_t, 'beta > gamma > third') and not matches(third_t, 'beta > third'),
+    third_t
+  )
+
+  -- The cursor on `describe('beta'` itself is inside beta and outside gamma,
+  -- even though all three start on this line.
+  cursor_on(6, "describe('beta'")
+  local beta = testmod.config(0)
+  check(
+    'jest: the cursor on the outer describe of a one-line chain is that suite',
+    beta ~= nil and beta.name == 'Debug suite: beta',
+    beta and beta.name
   )
 
   vim.cmd.edit(fx .. '/vitest-proj/sum.test.ts')

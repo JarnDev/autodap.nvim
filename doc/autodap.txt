@@ -235,6 +235,9 @@ installed, which is what makes the awkward cases come out right:
     decorates, not to whatever came before it;
 - nested `class Test*` produce the full `Outer::Inner::test_x` node id;
 - a `def` nested inside a test is not mistaken for a test of its own;
+- when several tests share a line — `it('a', fn); it('b', fn);` — the one at the
+    cursor column is the one that runs; a neighbour on the same line is never
+    treated as an enclosing suite;
 - parametrised titles (`it.each`’s `%s`/`$column`, and `${}` in template
     literals) become wildcards in the pattern, so every row matches instead of
     none.

@@ -174,7 +174,7 @@ local function js_expand_each(parts)
 end
 
 local function js_matches(bufnr, root, lang)
-  local out = {}
+  local out, seen = {}, {}
   local ran = each_match(bufnr, root, lang, JS_QUERY, function(caps)
     if not (caps.fn and caps.title and caps.call) then
       return
@@ -189,14 +189,24 @@ local function js_matches(bufnr, root, lang)
     if callee:find('%f[%w]each%f[%W]') or callee:find('%f[%w]for%f[%W]') then
       parts = js_expand_each(parts)
     end
-    local srow, _, erow, _ = caps.call:range()
+    -- One call_expression can satisfy more than one alternative of the query;
+    -- keep the first answer so the ancestry map below has a single entry per node.
+    local id = caps.call:id()
+    if seen[id] then
+      return
+    end
+    seen[id] = true
+    local srow, scol, erow, ecol = caps.call:range()
     local text = {}
     for _, p in ipairs(parts) do
       text[#text + 1] = p.text
     end
     out[#out + 1] = {
+      node = caps.call,
       srow = srow,
+      scol = scol,
       erow = erow,
+      ecol = ecol,
       kind = kind,
       parts = parts,
       text = table.concat(text),
@@ -247,10 +257,15 @@ local function py_matches(bufnr, root, lang)
     if not wanted or not py_collectable(caps.def) then
       return
     end
-    local srow, _, erow, _ = py_range(caps.def)
+    local srow, scol, erow, ecol = py_range(caps.def)
     out[#out + 1] = {
+      -- The definition node, not the widened decorated_definition: ancestry is
+      -- walked from here and a decorator is never somebody's enclosing class.
+      node = caps.def,
       srow = srow,
+      scol = scol,
       erow = erow,
+      ecol = ecol,
       kind = is_class and 'suite' or 'test',
       name = name,
     }
@@ -260,14 +275,53 @@ end
 
 -- ---- selection --------------------------------------------------------------
 
+local function before(r1, c1, r2, c2)
+  return r1 < r2 or (r1 == r2 and c1 < c2)
+end
+
+-- Ranges are compared on (row, column), not row alone: two tests can share a
+-- line (`it('a', fn); it('b', fn);`, a minified or prettier-collapsed file), and
+-- a row-only test would call the first one an ancestor of the second and hand
+-- the runner a filter matching neither. `col` may be nil, meaning "anywhere on
+-- this row", for callers that only know a line number.
+local function contains(m, row, col)
+  if row < m.srow or row > m.erow then
+    return false
+  end
+  if col == nil then
+    return true
+  end
+  if row == m.srow and col < m.scol then
+    return false
+  end
+  -- The end column from `range()` is exclusive.
+  if row == m.erow and col >= m.ecol then
+    return false
+  end
+  return true
+end
+
+local function starts_at_or_before(m, row, col)
+  if col == nil then
+    return m.srow <= row
+  end
+  return not before(row, col, m.srow, m.scol)
+end
+
 -- The innermost match containing the cursor, or — when the cursor sits between
--- tests rather than in one — the nearest match above it, which is what the regex
--- scanner has always done and is still the useful answer there.
-local function target_for(matches, row)
+-- tests rather than in one — the nearest match starting before it, which is what
+-- the regex scanner has always done and is still the useful answer there.
+local function target_for(matches, row, col)
   local best
   for _, m in ipairs(matches) do
-    if m.srow <= row and row <= m.erow then
-      if not best or m.srow > best.srow or (m.srow == best.srow and m.erow < best.erow) then
+    if contains(m, row, col) then
+      -- Properly nested ranges: the one starting last is the innermost, and on a
+      -- tie the one ending first.
+      if
+        not best
+        or before(best.srow, best.scol, m.srow, m.scol)
+        or (m.srow == best.srow and m.scol == best.scol and before(m.erow, m.ecol, best.erow, best.ecol))
+      then
         best = m
       end
     end
@@ -276,28 +330,51 @@ local function target_for(matches, row)
     return best
   end
   for _, m in ipairs(matches) do
-    if m.srow <= row and (not best or m.srow > best.srow) then
+    if starts_at_or_before(m, row, col) and (not best or before(best.srow, best.scol, m.srow, m.scol)) then
       best = m
     end
   end
   return best
 end
 
--- The target plus everything enclosing it, outermost first.
+-- The target plus everything enclosing it, outermost first. Enclosure is read
+-- off the syntax tree — walk the target's actual parents and keep the ones that
+-- are themselves tests or suites — so a neighbour that merely overlaps the
+-- target's lines can never be mistaken for a parent.
 local function chain_for(matches, target)
-  local path = {}
+  local by_node = {}
   for _, m in ipairs(matches) do
-    if m.srow <= target.srow and m.erow >= target.erow then
-      path[#path + 1] = m
-    end
+    by_node[m.node:id()] = m
   end
-  table.sort(path, function(a, b)
-    if a.srow ~= b.srow then
-      return a.srow < b.srow
+  local reversed = { target }
+  local parent = target.node:parent()
+  while parent do
+    local m = by_node[parent:id()]
+    if m then
+      reversed[#reversed + 1] = m
     end
-    return a.erow > b.erow
-  end)
+    parent = parent:parent()
+  end
+  local path = {}
+  for i = #reversed, 1, -1 do
+    path[#path + 1] = reversed[i]
+  end
   return path
+end
+
+-- A cursor in a line's leading indentation means the first thing on that line;
+-- without this, `0` on an indented `def test_x` would land to the left of the
+-- test's range and resolve to whatever encloses it instead.
+local function snap_to_line_start(bufnr, row, col)
+  if col == nil then
+    return nil
+  end
+  local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1]
+  local first = line and line:find('%S')
+  if first and col < first - 1 then
+    return first - 1
+  end
+  return col
 end
 
 -- ---- public -----------------------------------------------------------------
@@ -313,7 +390,9 @@ function M.lang(bufnr)
   return RESOLVER[lang] and lang or nil
 end
 
--- Nearest test for `cursor_row` (1-based).
+-- Nearest test for the cursor at `cursor_row` (1-based) and `cursor_col`
+-- (0-based, as `nvim_win_get_cursor` reports it). `cursor_col` may be omitted,
+-- which means "anywhere on that row" and cannot tell two tests on one line apart.
 --
 -- Returns `hit, lang`. A nil second return means treesitter could not answer at
 -- all (no parser / unsupported language / parse failure) and the caller should
@@ -322,7 +401,7 @@ end
 -- Python hits carry `suffix` — the pytest node-id tail `Class::Nested::test_x`.
 -- JS hits carry `title` (display) and `path` (a list of title part-lists,
 -- outermost suite first) so the caller can build the runner's `-t` regex.
-function M.nearest(bufnr, cursor_row)
+function M.nearest(bufnr, cursor_row, cursor_col)
   local parser = parser_for(bufnr)
   if not parser then
     return nil, nil
@@ -343,7 +422,8 @@ function M.nearest(bufnr, cursor_row)
     return nil, nil -- the query did not compile against this parser
   end
 
-  local target = target_for(matches, cursor_row - 1)
+  local row = cursor_row - 1
+  local target = target_for(matches, row, snap_to_line_start(bufnr, row, cursor_col))
   if not target then
     return nil, lang
   end

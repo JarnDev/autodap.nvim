@@ -148,8 +148,8 @@ end
 -- Treesitter first; the regex scanner only when the buffer's language has no
 -- parser. autodap.ts returns a language exactly when it was able to look, which
 -- is what distinguishes "no test here" from "cannot tell".
-local function nearest(bufnr, ft, cursor_row)
-  local near, lang = require('autodap.ts').nearest(bufnr, cursor_row)
+local function nearest(bufnr, ft, cursor_row, cursor_col)
+  local near, lang = require('autodap.ts').nearest(bufnr, cursor_row, cursor_col)
   if lang then
     return near
   end
@@ -221,11 +221,12 @@ local function extra_args(fw)
   return (t and t.extra_args and t.extra_args[fw]) or {}
 end
 
--- Cursor row of the window showing `bufnr`. "Under the cursor" only means
--- something for a displayed buffer, so a hidden buffer yields no test config.
--- Windows in other tabpages count too, so `:checkhealth` (which opens its own
--- tab) can still report the test under your cursor.
-local function cursor_row_for(bufnr)
+-- Cursor position (1-based row, 0-based column) in the window showing `bufnr`.
+-- "Under the cursor" only means something for a displayed buffer, so a hidden
+-- buffer yields no test config. Windows in other tabpages count too, so
+-- `:checkhealth` (which opens its own tab) can still report the test under your
+-- cursor.
+local function cursor_pos_for(bufnr)
   local win = vim.fn.bufwinid(bufnr)
   if win == -1 then
     win = vim.fn.win_findbuf(bufnr)[1]
@@ -233,7 +234,8 @@ local function cursor_row_for(bufnr)
   if not win or win == -1 then
     return nil
   end
-  return vim.api.nvim_win_get_cursor(win)[1]
+  local pos = vim.api.nvim_win_get_cursor(win)
+  return pos[1], pos[2]
 end
 
 -- Build a dap config for the test under the cursor, or nil if there is none.
@@ -242,7 +244,7 @@ function M.config(bufnr)
   local detect = require('autodap.detect')
   local file = vim.api.nvim_buf_get_name(bufnr)
   local ft = vim.bo[bufnr].filetype
-  local cursor_row = cursor_row_for(bufnr)
+  local cursor_row, cursor_col = cursor_pos_for(bufnr)
   if not cursor_row then
     return nil
   end
@@ -251,7 +253,7 @@ function M.config(bufnr)
     if not is_py_test_file(file) then
       return nil
     end
-    local near = nearest(bufnr, ft, cursor_row)
+    local near = nearest(bufnr, ft, cursor_row, cursor_col)
     if not near then
       return nil
     end
@@ -277,7 +279,7 @@ function M.config(bufnr)
     if not fw then
       return nil
     end
-    local near = nearest(bufnr, ft, cursor_row)
+    local near = nearest(bufnr, ft, cursor_row, cursor_col)
     if not near then
       return nil
     end

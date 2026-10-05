@@ -9,10 +9,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 - Nearest-test detection is Treesitter-based wherever a parser for the buffer's
   language is installed: the test resolved is the innermost one the cursor is
-  actually inside. Nested `describe`s join the `-t` pattern, a cursor on a
-  `@pytest.mark.parametrize` decorator resolves to the test it decorates, nested
-  `class Test*` produce the full `Outer::Inner::test_x` node id, a `def` nested
-  inside a test is no longer mistaken for a test, and parametrised titles
+  actually inside — by row *and* column, so a collapsed
+  `it('a', fn); it('b', fn);` debugs the test you are on rather than stitching
+  its neighbour into the filter. Nested `describe`s join the `-t` pattern, a
+  cursor on a `@pytest.mark.parametrize` decorator resolves to the test it
+  decorates, nested `class Test*` produce the full `Outer::Inner::test_x` node
+  id, a `def` nested inside a test is no longer mistaken for a test, and
+  parametrised titles
   (`it.each`'s `%s` / `$column`, `${}` in template literals) become wildcards so
   every row matches instead of none. Treesitter is not a dependency — with no
   parser autodap falls back to the previous regex scanner, and
