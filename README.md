@@ -59,7 +59,7 @@ and configurations on the fly.
 
 | Language | Adapter | Discovered automatically |
 | --- | --- | --- |
-| Node / JS / TS | `js-debug-adapter` | every script in the nearest `package.json`; launch current file (uses local `tsx`/`ts-node` for TS); attach to a process |
+| Node / JS / TS | `js-debug-adapter` | every script in the nearest `package.json`; launch current file (TS runs on a local or global `tsx`/`ts-node`, else on plain `node` ≥ 22.18, which strips types natively); attach to a process |
 | Python | `debugpy` | launch current file (with/without args); interpreter from `VIRTUAL_ENV` or the nearest `.venv` walking up; attach on `127.0.0.1:5678` |
 | C / C++ | `codelldb` | executable targets from the CMake File API (bounded scan fallback); **auto-compiles a lone `.c`/`.cpp` with `-g`** when there is no build system |
 
@@ -129,6 +129,7 @@ require('autodap').setup({
     -- Compile a lone .c/.cpp with -g when there is no build system to find a
     -- binary in. Set false to be prompted for an executable path instead.
     auto_compile = true,
+    -- Appended after the nearest compile_flags.txt's flags, if there is one.
     compile_flags = { '-g', '-O0' },
   },
 
@@ -165,7 +166,10 @@ executables) on top.
 
 **C/C++** works too — a native debugger can't run a `.c` directly, so when there
 is no build system autodap compiles the current file with `-g` and debugs the
-result, recompiling on each launch so edits are always picked up.
+result, recompiling on each launch so edits are always picked up. A
+`compile_flags.txt` (the clangd convention) in the file's directory or a parent
+adds its flags (`-std=c++20`, `-Iinc`, …; relative paths resolve from that file),
+so the debug build matches what your editor checks.
 
 ### Debug the test under the cursor
 

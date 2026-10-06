@@ -56,6 +56,35 @@ local function ts_runtime(root)
   return nil
 end
 
+-- Node >= 22.18 (and every 23.6+) runs erasable-syntax TypeScript natively by
+-- replacing types with whitespace, so lines and columns stay put and
+-- breakpoints bind without source maps. Used only when there's no tsx/ts-node.
+local node_version_cache
+function M.node_version()
+  if node_version_cache == nil then
+    node_version_cache = false
+    local ok, res = pcall(function()
+      return vim.system({ 'node', '--version' }, { text = true }):wait(2000)
+    end)
+    if ok and res and res.code == 0 then
+      local major, minor = (res.stdout or ''):match('^v(%d+)%.(%d+)')
+      if major then
+        node_version_cache = { tonumber(major), tonumber(minor) }
+      end
+    end
+  end
+  return node_version_cache or nil
+end
+
+local function node_strips_types()
+  local v = M.node_version()
+  if not v then
+    return false
+  end
+  local major, minor = v[1], v[2]
+  return major > 23 or (major == 23 and minor >= 6) or (major == 22 and minor >= 18)
+end
+
 -- `root` is the nearest package.json directory (monorepo-aware), so scripts and
 -- cwd belong to the workspace member the file lives in, not the repo root.
 function M.configs(root, _, bufnr)
@@ -66,7 +95,7 @@ function M.configs(root, _, bufnr)
     local t = ts_runtime(root)
     if t then
       runtime = t
-    else
+    elseif not node_strips_types() then
       hint = ' (install tsx for TS)'
     end
   end

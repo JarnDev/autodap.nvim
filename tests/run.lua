@@ -64,6 +64,34 @@ check(
   nlaunch and nlaunch.runtimeExecutable
 )
 
+-- NODE: a TS file with no tsx/ts-node anywhere runs on plain node when node
+-- strips types natively (>= 22.18 / 23.6), and keeps the install hint otherwise.
+print('[node native TS]')
+local nodead = require('autodap.adapters.node')
+local real_version, real_path = nodead.node_version, vim.env.PATH
+vim.env.PATH = '/nonexistent' -- no global tsx/ts-node
+vim.cmd.edit(fx .. '/ts-native/index.ts')
+vim.bo.filetype = 'typescript'
+for _, case in ipairs({
+  { v = { 24, 15 }, native = true },
+  { v = { 22, 18 }, native = true },
+  { v = { 23, 6 }, native = true },
+  { v = { 22, 17 }, native = false },
+  { v = { 20, 19 }, native = false },
+}) do
+  nodead.node_version = function()
+    return case.v
+  end
+  local l = has(autodap.configs_for_buf(0), 'Launch current file')
+  local label = ('node %d.%d'):format(case.v[1], case.v[2])
+  if case.native then
+    check(label .. ': plain node, no install hint', l ~= nil and l.runtimeExecutable == 'node' and not l.name:find('install tsx', 1, true), l and l.name)
+  else
+    check(label .. ': install tsx hint', l ~= nil and l.name:find('install tsx', 1, true) ~= nil, l and l.name)
+  end
+end
+nodead.node_version, vim.env.PATH = real_version, real_path
+
 -- PYTHON: interpreter resolves to the project virtualenv.
 print('[python]')
 vim.cmd.edit(fx .. '/python/src/main.py')

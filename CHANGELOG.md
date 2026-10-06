@@ -17,6 +17,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Single-file C/C++ auto-compile honors the nearest `compile_flags.txt` (the clangd convention):
   its flags (for example `-std=c++20` or `-Iinc`) are passed to the compiler, with relative paths
   resolved from that file's directory. The `-g -O0` debug flags still come last.
+- TypeScript "Launch current file" works without `tsx`/`ts-node`: when neither is found (locally,
+  hoisted or on PATH) and `node` is 22.18+ or 23.6+, the file runs on plain `node`, which strips
+  types natively and keeps line/column positions, so breakpoints bind without source maps. A
+  project with `tsx`/`ts-node` still uses it; older Node keeps the "install tsx" hint.
 
 ### Changed
 - `:help autodap` no longer shows a "Last change" date on its title line. The
