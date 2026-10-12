@@ -81,7 +81,7 @@ one-line `def test_two(self): assert True` is the exact shape the nearest-test
 resolver is tested against, so bandit's B101 ("use of assert detected") and
 radarlint's S5914 ("boolean value is constant") report the fixture's purpose as
 a defect. The exclusion names those three plugins and that one directory, so
-the same rules still block on everything else and secret scanning
+the same rules still run on everything else and secret scanning
 (`trufflehog`) still covers the fixtures.
 
 ## Documentation
