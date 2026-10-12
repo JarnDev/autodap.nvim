@@ -40,6 +40,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `:checkhealth autodap` inspected its own report buffer, so its "current buffer"
   section never described the file you were editing. It now reports on the file
   you came from, including the test under the cursor.
+- `:checkhealth autodap` no longer describes the *previous* file when you open one
+  and run it straight away. It picked the most recently used buffer, but Vim's
+  `lastused` is only accurate to the second, so two buffers used within the same
+  second tied and the older one kept the report — language, project root and test
+  under the cursor all belonged to the file you had just left. The subject buffer
+  is now resolved on a total order: still on screen, then `lastused`, then buffer
+  number.
 - `:checkhealth autodap` reports adapters owned by your own config as such, and
   distinguishes "will install on first use" from "will never be installed".
 

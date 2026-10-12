@@ -333,6 +333,77 @@ check(
   install.install_hint('python')
 )
 
+-- WHICH BUFFER THE REPORT IS ABOUT. `:checkhealth` opens the report in its own
+-- tabpage, so the health module has to pick the file you were last editing out
+-- of the buffer list. `lastused` is in whole seconds, so opening a file and
+-- running `:checkhealth` right away ties the two newest buffers, and the report
+-- used to describe the file you had just left.
+print('[checkhealth / subject buffer]')
+local health = require('autodap.health')
+
+-- One window, and only the buffers this section opens: the selector ranks every
+-- listed file buffer, so the fixtures opened above would otherwise join in.
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd('enew!')
+local scratch = vim.api.nvim_get_current_buf()
+for _, b in ipairs(vim.api.nvim_list_bufs()) do
+  if b ~= scratch then
+    pcall(vim.api.nvim_buf_delete, b, { force = true })
+  end
+end
+
+-- Edit a JS file, then a Python file in the same window, then open an unnamed
+-- `nofile` buffer in its own tabpage the way `:checkhealth` does.
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+local js_buf = vim.api.nvim_get_current_buf()
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+local py_buf = vim.api.nvim_get_current_buf()
+local tied = vim.fn.getbufinfo(js_buf)[1].lastused == vim.fn.getbufinfo(py_buf)[1].lastused
+vim.cmd('tab new')
+vim.bo.buftype = 'nofile'
+
+local picked = health.subject_buf()
+check(
+  'the report is about the file opened last, not the report buffer',
+  picked == py_buf,
+  ('picked %s (lastused tied: %s)'):format(vim.fn.bufname(picked or 0), tied)
+)
+
+-- That tie is the clock's to give, so force one rather than trust this section
+-- to land inside a single second on every machine.
+local real_getbufinfo = vim.fn.getbufinfo
+local function subject_buf_on_a_tie()
+  vim.fn.getbufinfo = function(...)
+    local infos = real_getbufinfo(...)
+    for _, info in ipairs(infos) do
+      info.lastused = 1
+    end
+    return infos
+  end
+  local ok, result = pcall(health.subject_buf)
+  vim.fn.getbufinfo = real_getbufinfo
+  return ok and result or nil
+end
+
+local forced = subject_buf_on_a_tie()
+check(
+  'a forced lastused tie still resolves to the displayed file',
+  forced == py_buf,
+  vim.fn.bufname(forced or 0)
+)
+
+-- And with every candidate hidden — the report window showing something else,
+-- both files only in the buffer list — the tie falls to the one opened last.
+vim.cmd('tabclose')
+vim.cmd('enew!')
+local hidden = subject_buf_on_a_tie()
+check(
+  'with no candidate on screen the newest buffer number wins the tie',
+  hidden == py_buf,
+  vim.fn.bufname(hidden or 0)
+)
+
 print(('\n%d failure(s)'):format(failures))
 if failures > 0 then
   vim.cmd('cquit 1')
