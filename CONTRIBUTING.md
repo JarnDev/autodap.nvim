@@ -61,6 +61,29 @@ the codelldb download. That version is pinned in both `.github/workflows/ci.yml`
 and `scripts/e2e.sh` — bump them together, or the cache key stops matching what
 is downloaded.
 
+## Code quality
+
+`.qlty/qlty.toml` configures [qlty](https://qlty.sh), which runs `qlty check`
+and `qlty fmt` on every pull request. The file is committed so the CLI and the
+PR check analyse the repository the same way; it holds the plugin set `qlty
+init` detects here (actionlint, bandit, radarlint-python, ripgrep, ruff,
+shellcheck, trufflehog, zizmor), so a language added later needs its plugin
+enabled there by hand. Run it the way CI does:
+
+```sh
+qlty check          # just your changes
+qlty check --all    # the whole repository
+```
+
+`tests/fixtures/**` is excluded from the Python linters — `bandit`,
+`radarlint-python` and `ruff`. Those projects are debuggee material: a
+one-line `def test_two(self): assert True` is the exact shape the nearest-test
+resolver is tested against, so bandit's B101 ("use of assert detected") and
+radarlint's S5914 ("boolean value is constant") report the fixture's purpose as
+a defect. The exclusion names those three plugins and that one directory, so
+the same rules still block on everything else and secret scanning
+(`trufflehog`) still covers the fixtures.
+
 ## Documentation
 
 `doc/autodap.txt` (what `:help autodap` reads) is generated from `README.md`
@@ -137,7 +160,8 @@ Three conventions apply to everything under `.github/workflows/`:
   `panvimdoc` take `contents: read`; `release` needs `contents: write` to publish.
   Grant the narrowest scope the job actually uses.
 
-`zizmor` (via `qlty`) audits these files on any pull request that touches them.
+`zizmor` audits these files on any pull request that touches them — it is one of
+the plugins in `.qlty/qlty.toml` (see [Code quality](#code-quality)).
 
 ## Commit messages
 
