@@ -53,18 +53,53 @@ local function check_adapters()
   end
 end
 
+-- Lexicographic comparison of two rank tuples, highest key first.
+local function outranks(a, b)
+  for i = 1, #a do
+    if a[i] ~= b[i] then
+      return a[i] > b[i]
+    end
+  end
+  return false
+end
+
 -- `:checkhealth` runs with its own scratch buffer focused, so "the current
 -- buffer" has to mean the file you were last editing, not the report itself.
-local function subject_buf()
+--
+-- `autodap.focus` records exactly that — the order real file buffers were last
+-- entered — because nothing Vim keeps does: `lastused` is only accurate to the
+-- second, so opening a file and running `:checkhealth` straight away leaves the
+-- two newest buffers tied. Rank candidates on a total order, highest first:
+--
+--   1. the `autodap.focus` entry ordinal: the file you were actually in,
+--      whether or not the clock could tell it apart from the one before;
+--   2. still displayed in a window, for buffers that predate autodap loading
+--      and so carry no ordinal — you cannot edit a buffer without entering it,
+--      so a visible file beats a hidden one;
+--   3. `lastused`, the real signal whenever the seconds do differ;
+--   4. the buffer number, purely to make the remaining ties deterministic. It
+--      says which buffer was created first, not which you looked at last, so
+--      it only ever decides between buffers nothing else distinguishes.
+--
+-- Exported because the tie is what `:checkhealth` actually hits, and the tests
+-- pin it.
+function M.subject_buf()
   local cur = vim.api.nvim_get_current_buf()
   if vim.bo[cur].buftype == '' and vim.api.nvim_buf_get_name(cur) ~= '' then
     return cur
   end
-  local best, best_used
+  local focus = require('autodap.focus')
+  local best, best_rank
   for _, info in ipairs(vim.fn.getbufinfo({ buflisted = 1 })) do
     if info.name ~= '' and vim.bo[info.bufnr].buftype == '' then
-      if not best_used or info.lastused > best_used then
-        best, best_used = info.bufnr, info.lastused
+      local rank = {
+        focus.ordinal(info.bufnr),
+        #(info.windows or {}) > 0 and 1 or 0,
+        info.lastused,
+        info.bufnr,
+      }
+      if not best_rank or outranks(rank, best_rank) then
+        best, best_rank = info.bufnr, rank
       end
     end
   end
@@ -73,7 +108,7 @@ end
 
 local function check_buffer()
   H.start('autodap: current buffer')
-  local bufnr = subject_buf()
+  local bufnr = M.subject_buf()
   local ok, detect = pcall(require, 'autodap.detect')
   if not ok then
     return

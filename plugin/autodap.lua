@@ -3,6 +3,10 @@ if vim.g.loaded_autodap then
 end
 vim.g.loaded_autodap = 1
 
+-- `:checkhealth autodap` reports on the file you came from, and only an
+-- autocmd running before the report opens can know which file that was.
+require('autodap.focus').track()
+
 vim.api.nvim_create_user_command('AutodapContinue', function()
   require('autodap').continue()
 end, { desc = 'autodap: configure the current project and start/continue debugging' })

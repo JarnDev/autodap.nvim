@@ -333,6 +333,199 @@ check(
   install.install_hint('python')
 )
 
+-- WHICH BUFFER THE REPORT IS ABOUT. `:checkhealth` opens the report in a buffer
+-- of its own, so the health module has to pick the file you were last editing
+-- out of the buffer list. Everything Vim records about that is ambiguous:
+-- `lastused` is in whole seconds, so opening a file and running `:checkhealth`
+-- right away ties the two newest buffers; the buffer number only says which one
+-- was created first; and with two files in splits, being on screen ties too.
+-- `autodap.focus` stamps an entry ordinal to break those ties, and the checks
+-- below cover each arrangement — through the selector, and through the real
+-- `:checkhealth autodap` command.
+print('[checkhealth / subject buffer]')
+local health = require('autodap.health')
+
+-- One window, and only the buffers this section opens: the selector ranks every
+-- listed file buffer, so the fixtures opened above would otherwise join in.
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd('enew!')
+local scratch = vim.api.nvim_get_current_buf()
+for _, b in ipairs(vim.api.nvim_list_bufs()) do
+  if b ~= scratch then
+    pcall(vim.api.nvim_buf_delete, b, { force = true })
+  end
+end
+
+-- Edit a JS file, then a Python file in the same window, then open an unnamed
+-- `nofile` buffer in its own tabpage the way `:checkhealth` does.
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+local js_buf = vim.api.nvim_get_current_buf()
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+local py_buf = vim.api.nvim_get_current_buf()
+local tied = vim.fn.getbufinfo(js_buf)[1].lastused == vim.fn.getbufinfo(py_buf)[1].lastused
+vim.cmd('tab new')
+vim.bo.buftype = 'nofile'
+
+local picked = health.subject_buf()
+check(
+  'the report is about the file opened last, not the report buffer',
+  picked == py_buf,
+  ('picked %s (lastused tied: %s)'):format(vim.fn.bufname(picked or 0), tied)
+)
+
+-- That tie is the clock's to give, so force one rather than trust this section
+-- to land inside a single second on every machine.
+local real_getbufinfo = vim.fn.getbufinfo
+local function with_tied_lastused(fn)
+  vim.fn.getbufinfo = function(...)
+    local infos = real_getbufinfo(...)
+    for _, info in ipairs(infos) do
+      info.lastused = 1
+    end
+    return infos
+  end
+  local ok, result = pcall(fn)
+  vim.fn.getbufinfo = real_getbufinfo
+  if not ok then
+    print('  (error: ' .. tostring(result) .. ')')
+    return nil
+  end
+  return result
+end
+
+local function subject_buf_on_a_tie()
+  return with_tied_lastused(health.subject_buf)
+end
+
+local forced = subject_buf_on_a_tie()
+check(
+  'a forced lastused tie still resolves to the file you were in',
+  forced == py_buf,
+  vim.fn.bufname(forced or 0)
+)
+
+-- And with every candidate hidden — the report window showing something else,
+-- both files only in the buffer list — the tie still falls to the file you were
+-- in, because the entry ordinal does not depend on anything being on screen.
+vim.cmd('tabclose')
+vim.cmd('enew!')
+local hidden = subject_buf_on_a_tie()
+check(
+  'a tie between hidden candidates resolves to the file you were in',
+  hidden == py_buf,
+  vim.fn.bufname(hidden or 0)
+)
+
+-- Both files on screen at once, and you come back to the one Vim created first.
+-- Nothing but the entry ordinal knows that: the windows tie, the clock ties,
+-- and the buffer number says the file you are *not* in was opened later.
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+vim.cmd.vsplit(fx .. '/pytest-proj/tests/test_math.py')
+vim.cmd('wincmd p')
+check(
+  'the file returned to is the lower-numbered buffer, as in the report',
+  vim.api.nvim_get_current_buf() == js_buf and js_buf < py_buf,
+  ('js=%s py=%s'):format(js_buf, py_buf)
+)
+vim.cmd('tab new')
+vim.bo.buftype = 'nofile'
+local returned = subject_buf_on_a_tie()
+check(
+  'with two candidates on screen the one you returned to wins the tie',
+  returned == js_buf,
+  vim.fn.bufname(returned or 0)
+)
+vim.cmd('tabclose')
+
+-- The same arrangements through the real command, which is where the tie
+-- actually shows up. `:checkhealth` opens its own tabpage; closing it puts you
+-- back in the window you ran it from, so the next `:edit` there overwrites the
+-- alternate file and leaves the ordinal as the only record of where you are.
+local function health_report(command)
+  -- `silent` keeps `:checkhealth`'s own progress echo out of the test output.
+  -- It also drops whatever newline the message system still has pending, so
+  -- flush the previous result's line out first or the next one joins it.
+  print('')
+  with_tied_lastused(function()
+    vim.cmd('silent ' .. command)
+  end)
+  return table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+end
+
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+local first = health_report('checkhealth autodap')
+check(
+  'the report describes the JS file it was run from',
+  first:find('language: node', 1, true) ~= nil,
+  first:match('buffer: %S+') or first
+)
+vim.cmd('tabclose')
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+local second = health_report('checkhealth autodap')
+check(
+  'run again straight after opening a Python file, the report follows',
+  second:find('language: python', 1, true) ~= nil
+    and second:find('pytest%-proj/tests/test_math%.py') ~= nil,
+  second:match('buffer: %S+') or second
+)
+vim.cmd('tabclose')
+
+-- `:vert checkhealth` puts the report in a split beside the file instead of in
+-- its own tabpage, which leaves both candidates on screen. Run it from the file
+-- Vim created *first*: on screen, on the clock and on the buffer number that is
+-- a three-way tie, and the entry ordinal is the only thing left that knows the
+-- JS file is the one being asked about.
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd.edit(fx .. '/pytest-proj/tests/test_math.py')
+vim.cmd.vsplit(fx .. '/jest-proj/sum.test.js')
+local split = health_report('vert checkhealth autodap')
+check(
+  ':vert checkhealth reports on the window it was run from',
+  split:find('language: node', 1, true) ~= nil
+    and split:find('jest%-proj/sum%.test%.js') ~= nil,
+  split:match('buffer: %S+') or split
+)
+vim.cmd('silent! only!')
+
+-- Buffers that predate autodap carry no entry ordinal — a lazy-loaded plugin,
+-- or a session restored before any autodap command ran. Those fall back to the
+-- older signals, which still have to resolve a tie the same way every time.
+local function subject_buf_without_ordinals()
+  for _, b in ipairs({ js_buf, py_buf }) do
+    pcall(vim.api.nvim_buf_del_var, b, 'autodap_focus')
+  end
+  return subject_buf_on_a_tie()
+end
+
+vim.cmd('silent! tabonly!')
+vim.cmd('silent! only!')
+vim.cmd.edit(fx .. '/jest-proj/sum.test.js')
+vim.cmd('vsplit')
+vim.cmd('enew!')
+vim.bo.buftype = 'nofile'
+local on_screen = subject_buf_without_ordinals()
+check(
+  'without ordinals, the candidate still on screen wins the tie',
+  on_screen == js_buf,
+  vim.fn.bufname(on_screen or 0)
+)
+
+vim.cmd('silent! only!')
+vim.cmd('enew!')
+vim.bo.buftype = 'nofile'
+local last_resort = subject_buf_without_ordinals()
+check(
+  'without ordinals and with nothing on screen, the pick is still deterministic',
+  last_resort == py_buf and subject_buf_without_ordinals() == py_buf,
+  vim.fn.bufname(last_resort or 0)
+)
+
 print(('\n%d failure(s)'):format(failures))
 if failures > 0 then
   vim.cmd('cquit 1')
