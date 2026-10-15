@@ -63,6 +63,18 @@ check(
   nlaunch ~= nil and tostring(nlaunch.runtimeExecutable):find('node_modules/.bin/tsx', 1, true) ~= nil,
   nlaunch and nlaunch.runtimeExecutable
 )
+-- js-debug must skip source maps of system-installed packages (Debian/Ubuntu
+-- ts-node, typescript in /usr/share/nodejs ship maps to sources they don't ship),
+-- but keep resolving everything else: the project, node_modules, monorepo siblings.
+local function skips_system_maps(c)
+  local l = c and c.resolveSourceMapLocations
+  return type(l) == 'table' and l[1] == '**'
+    and vim.tbl_contains(l, '!/usr/share/nodejs/**')
+    and vim.tbl_contains(l, '!/usr/lib/node_modules/**')
+    and not vim.tbl_contains(l, '!**/node_modules/**')
+end
+check('launch skips only system-package source maps', skips_system_maps(nlaunch), nlaunch and vim.inspect(nlaunch.resolveSourceMapLocations))
+check('npm scripts skip only system-package source maps', skips_system_maps(dev), dev and vim.inspect(dev.resolveSourceMapLocations))
 
 -- NODE: a TS file with no tsx/ts-node anywhere runs on plain node when node
 -- strips types natively (>= 22.18 / 23.6), and keeps the install hint otherwise.

@@ -100,6 +100,14 @@ function M.configs(root, _, bufnr)
     end
   end
 
+  -- js-debug reads the source map of every script it loads. A TypeScript runner or
+  -- compiler installed as a distro package (Debian/Ubuntu `ts-node` in
+  -- /usr/share/nodejs) ships maps pointing at sources it does not ship, and each one
+  -- prints "Could not read source map ... ENOENT". Skipping only system-installed
+  -- packages silences that without touching your project, its node_modules or the
+  -- sibling packages of a monorepo, whose maps still resolve as before.
+  local source_maps = { '**', '!/usr/share/nodejs/**', '!/usr/lib/node_modules/**' }
+
   local pkg_name = vim.fn.fnamemodify(root, ':t')
   local out = {
     {
@@ -110,6 +118,7 @@ function M.configs(root, _, bufnr)
       cwd = root,
       runtimeExecutable = runtime,
       sourceMaps = true,
+      resolveSourceMapLocations = source_maps,
       console = 'integratedTerminal',
       skipFiles = { '<node_internals>/**' },
     },
@@ -132,6 +141,7 @@ function M.configs(root, _, bufnr)
         cwd = root,
         console = 'integratedTerminal',
         sourceMaps = true,
+        resolveSourceMapLocations = source_maps,
         skipFiles = { '<node_internals>/**' },
       }
     end
@@ -146,6 +156,7 @@ function M.configs(root, _, bufnr)
     end,
     cwd = root,
     sourceMaps = true,
+    resolveSourceMapLocations = source_maps,
     skipFiles = { '<node_internals>/**' },
   }
   return out
