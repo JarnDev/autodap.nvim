@@ -45,6 +45,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   blank lines inside code blocks.
 
 ### Fixed
+- Debugging TypeScript through a distro-packaged runner (Debian/Ubuntu
+  `ts-node` in `/usr/share/nodejs`, picked from `PATH` when the project has no
+  tsx/ts-node) no longer floods the output with `Could not read source map ...
+  ENOENT`: the Node configs set `resolveSourceMapLocations` to skip only
+  system-installed packages (`/usr/share/nodejs`, `/usr/lib/node_modules`).
+  Your project, its `node_modules` and monorepo siblings resolve exactly as
+  before.
 - `continue()` and `debug_test()` no longer refuse to start when *you* registered
   the adapter: the install guard only applies to adapters autodap registered itself.
 - The "installing the adapter — run again once it finishes" notice is now only
